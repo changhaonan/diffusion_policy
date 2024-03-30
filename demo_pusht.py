@@ -24,7 +24,7 @@ def main(output, render_size, control_hz):
     """
     
     # create replay buffer in read-write mode
-    replay_buffer = ReplayBuffer.create_from_path(output, mode='a')
+    replay_buffer = ReplayBuffer.create_from_path(output.strip(), mode='a')
 
     # create PushT env with keypoints
     kp_kwargs = PushTKeypointsEnv.genenerate_keypoint_manager_params()

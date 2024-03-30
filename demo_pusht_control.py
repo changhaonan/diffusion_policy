@@ -1,9 +1,10 @@
 """Demonstrate push-T with additional control"""
 
 import numpy as np
+import cv2
 import click
 from diffusion_policy.common.replay_buffer import ReplayBuffer
-from diffusion_policy.env.pusht.pusht_control import PushTImageControlEnv
+from diffusion_policy.env.pusht.pusht_control import PushTControlEnv
 import pygame
 
 
@@ -27,11 +28,12 @@ def main(output, control, render_size, control_hz):
     Hold "Space" to pause.
     """
 
+    control_repeat = 3 + 1  # repeat each control for 3 times
     # create replay buffer in read-write mode
     replay_buffer = ReplayBuffer.create_from_path(output, mode="a")
 
     # create PushT env with control
-    env = PushTImageControlEnv(control_type=control.strip(), render_size=render_size)
+    env = PushTControlEnv(control_type=control.strip(), render_size=render_size)
     agent = env.teleop_agent()
     clock = pygame.time.Clock()
 
@@ -39,7 +41,12 @@ def main(output, control, render_size, control_hz):
     while True:
         episode = list()
         # record in seed order, starting with 0
-        seed = replay_buffer.n_episodes
+        seed = replay_buffer.n_episodes // control_repeat
+        if replay_buffer.n_episodes % control_repeat == 0:
+            env.set_control(False)
+        else:
+            env.set_control(True)
+
         print(f"starting seed {seed}")
 
         # set seed for env
@@ -91,7 +98,12 @@ def main(output, control, render_size, control_hz):
                 state = np.concatenate([info["pos_agent"], info["block_pose"]])
                 # discard unused information such as visibility mask and agent pos
                 # for compatibility
-                data = {"img": img, "state": np.float32(state), "action": np.float32(act), "n_contacts": np.float32([info["n_contacts"]])}
+                data = {"img": img, "state": np.float32(state), "action": np.float32(act), "n_contacts": np.float32([info["n_contacts"]]), "control": env.get_control_image()}
+                control_img = data["control"]
+                # Overlay control image on img
+                img = cv2.addWeighted(img, 0.5, control_img, 0.5, 0)
+                cv2.imshow("control", img)
+                cv2.waitKey(1)
                 episode.append(data)
 
             # step env and render

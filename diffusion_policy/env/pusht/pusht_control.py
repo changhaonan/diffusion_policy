@@ -4,7 +4,7 @@ import numpy as np
 import pygame
 import cv2
 from gym import spaces
-from diffusion_policy.env.pusht.pusht_image_env import PushTImageEnv
+from diffusion_policy.env.pusht.pusht_env import PushTEnv
 
 
 def sample_points_on_shape(shape, points_per_edge):
@@ -26,18 +26,20 @@ def sample_points_on_shape(shape, points_per_edge):
     return sampled_points
 
 
-class PushTImageControlEnv(PushTImageEnv):
+class PushTControlEnv(PushTEnv):
     """Compared with image env, this env includes control image as observation.
     - control_type: str, control type, e.g. "contact", "repulse", "follow"
     """
 
-    def __init__(self, control_type="contact", legacy=False, block_cog=None, damping=None, render_size=96):
-        super().__init__(legacy=legacy, block_cog=block_cog, damping=damping, render_size=render_size)
+    def __init__(self, control_type="contact", legacy=False, block_cog=None, damping=None, render_size=96, render_action=False):
+        super().__init__(legacy=legacy, block_cog=block_cog, damping=damping, render_size=render_size, render_action=render_action)
         ws = self.window_size
         self.control_type = control_type
         self.controls = None
+        self.control_params = {"contact": {"radius": 60}, "repulse": {"radius": 40}, "follow": {"grid": 10}}
         self.control_counter = 0
-        self.control_update_freq = 100
+        self.control_update_freq = 10000
+        self.is_control = True
         self.observation_space = spaces.Dict(
             {
                 "image": spaces.Box(low=0, high=1, shape=(3, render_size, render_size), dtype=np.float32),
@@ -46,42 +48,52 @@ class PushTImageControlEnv(PushTImageEnv):
             }
         )
 
+    def set_control(self, flag):
+        self.is_control = flag
+
+    def reset(self):
+        obs = super().reset()
+        self.controls = None
+        return obs
+
     def get_control_image(self):
         """Get control image."""
         control_image = np.zeros((self.render_size, self.render_size, 3), dtype=np.float32)
-        if self.control_type == "contact" or self.control_type == "repulse":
-            # Sample a point on block
-            shape_lists = []
-            for shape in self.space.shapes:
-                if hasattr(shape, "is_target_object") and shape.is_target_object:
-                    # This is shape1
-                    shape_lists.append(shape)
-            if len(shape_lists) == 0:
-                return np.zeros((3, self.render_size, self.render_size), dtype=np.float32)
-            else:
-                points = []
-                for shape in shape_lists:
-                    points += sample_points_on_shape(shape, 10)  # Sample one point
-            if self.controls is None or self.control_counter % self.control_update_freq == 0:
-                self.control_random_vals = np.random.choice(len(points), 1)
-            self.controls = [np.array(points[i]) for i in self.control_random_vals]
-            for point in self.controls:
-                point_coord = (point / 512 * self.render_size).astype(np.int32)
-                cv2.drawMarker(
-                    control_image,
-                    tuple(point_coord),
-                    color=(1, 0, 0) if self.control_type == "contact" else (0, 1, 0),
-                    markerType=cv2.MARKER_CROSS,
-                    markerSize=8,
-                    thickness=1,
-                )
-        elif self.control_type == "follow":
-            if self.controls is None or self.control_counter % self.control_update_freq == 0:
-                self.control_random_vals = np.random.uniform(0.05, 0.1, (2))
-            self.controls = self.control_random_vals
-        self.control_counter += 1
-        # print(self.control_counter, self.controls, self.control_seed)
-        return control_image
+        if self.is_control:
+            if self.control_type == "contact" or self.control_type == "repulse":
+                # Sample a point on block
+                shape_lists = []
+                for shape in self.space.shapes:
+                    if hasattr(shape, "is_target_object") and shape.is_target_object:
+                        # This is shape1
+                        shape_lists.append(shape)
+                if len(shape_lists) == 0:
+                    return np.zeros((3, self.render_size, self.render_size), dtype=np.float32)
+                else:
+                    points = []
+                    for shape in shape_lists:
+                        points += sample_points_on_shape(shape, 10)  # Sample one point
+                if self.controls is None or self.control_counter % self.control_update_freq == 0:
+                    self.control_random_vals = np.random.choice(len(points), 1)
+                    print(f"control_random_vals: {self.control_random_vals}")
+                self.controls = [np.array(points[i]) for i in self.control_random_vals]
+                for point in self.controls:
+                    point_coord = (point / 512 * self.render_size).astype(np.int32)
+                    radius = int(self.control_params[self.control_type]["radius"] / 512 * self.render_size)
+                    cv2.circle(control_image, tuple(point_coord), radius, (0, 255, 0) if self.control_type == "contact" else (255, 0, 0), -1)
+            elif self.control_type == "follow":
+                if self.controls is None or self.control_counter % self.control_update_freq == 0:
+                    self.control_random_vals = np.random.uniform(0.05, 0.1, (2))
+                # Draw grid that the agent should follow
+                grid_size_x = int(self.control_random_vals[0] * self.render_size)
+                grid_size_y = int(self.control_random_vals[1] * self.render_size)
+                for i in range(0, self.render_size, grid_size_x):
+                    cv2.line(control_image, (i, 0), (i, self.render_size), (0, 0, 255), 1)
+                for i in range(0, self.render_size, grid_size_y):
+                    cv2.line(control_image, (0, i), (self.render_size, i), (0, 0, 255), 1)
+                self.controls = self.control_random_vals
+            self.control_counter += 1
+        return control_image.astype(np.uint8)
 
     def _draw_control_signal(self):
         temp_surface = pygame.Surface((self.window_size, self.window_size), pygame.SRCALPHA)
@@ -90,8 +102,9 @@ class PushTImageControlEnv(PushTImageEnv):
             if self.controls is not None:
                 for point in self.controls:
                     point_coord = (point / 512 * self.window_size).astype(np.int32)
+                    radius = int(self.control_params[self.control_type]["radius"])
                     color = (0, 255, 0, 128) if self.control_type == "contact" else (255, 0, 0, 128)
-                    pygame.draw.circle(temp_surface, color, point_coord, 50)
+                    pygame.draw.circle(temp_surface, color, point_coord, radius)
         elif self.control_type == "follow":
             if self.controls is not None:
                 # Draw grid that the agent should follow
@@ -102,11 +115,3 @@ class PushTImageControlEnv(PushTImageEnv):
                 for i in range(0, self.window_size, grid_size_y):
                     pygame.draw.line(temp_surface, (0, 0, 255, 128), (0, i), (self.window_size, i), 5)
         self.window.blit(temp_surface, temp_surface.get_rect())
-
-    def _get_obs(self):
-        obs = super()._get_obs()
-        control_image = self.get_control_image()
-        obs["control"] = control_image
-        # Overlay control image on top of the rendered image
-        self.render_cache = cv2.addWeighted(self.render_cache, 0.5, (255 * control_image).astype(np.uint8), 0.5, 0)
-        return obs
