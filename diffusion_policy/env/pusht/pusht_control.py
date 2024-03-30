@@ -69,7 +69,11 @@ class PushTControlEnv(PushTEnv):
                 round_y = int(round(act_y / grid_size_y) * grid_size_y)
                 res_x = np.clip(act_x - round_x, -eps, eps)
                 res_y = np.clip(act_y - round_y, -eps, eps)
-                act = (round_x + res_x, round_y + res_y)
+                if abs(res_x) < eps or abs(res_y) < eps:
+                    # Meaning it is already close to the grid
+                    act = (act_x, act_y)
+                else:
+                    act = (round_x + res_x, round_y + res_y)
         return act
 
     def get_control_image(self):
