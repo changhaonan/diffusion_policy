@@ -9,7 +9,7 @@ import pygame
 
 @click.command()
 @click.option("-o", "--output", required=True)
-@click.option("-c", "--control", default="contact", help="contact, region, style")
+@click.option("-c", "--control", default="contact", help="contact, repulse, style")
 @click.option("-rs", "--render_size", default=96, type=int)
 @click.option("-hz", "--control_hz", default=10, type=int)
 def main(output, control, render_size, control_hz):
@@ -31,7 +31,7 @@ def main(output, control, render_size, control_hz):
     replay_buffer = ReplayBuffer.create_from_path(output, mode="a")
 
     # create PushT env with control
-    env = PushTImageControlEnv(control_type=control, render_size=render_size)
+    env = PushTImageControlEnv(control_type=control.strip(), render_size=render_size)
     agent = env.teleop_agent()
     clock = pygame.time.Clock()
 

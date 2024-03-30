@@ -28,7 +28,7 @@ def sample_points_on_shape(shape, points_per_edge):
 
 class PushTImageControlEnv(PushTImageEnv):
     """Compared with image env, this env includes control image as observation.
-    - control_type: str, control type, e.g. "contact", "region", "follow"
+    - control_type: str, control type, e.g. "contact", "repulse", "follow"
     """
 
     def __init__(self, control_type="contact", legacy=False, block_cog=None, damping=None, render_size=96):
@@ -49,7 +49,7 @@ class PushTImageControlEnv(PushTImageEnv):
     def get_control_image(self):
         """Get control image."""
         control_image = np.zeros((self.render_size, self.render_size, 3), dtype=np.float32)
-        if self.control_type == "contact":
+        if self.control_type == "contact" or self.control_type == "repulse":
             # Sample a point on block
             shape_lists = []
             for shape in self.space.shapes:
@@ -63,18 +63,22 @@ class PushTImageControlEnv(PushTImageEnv):
                 for shape in shape_lists:
                     points += sample_points_on_shape(shape, 10)  # Sample one point
             if self.controls is None or self.control_counter % self.control_update_freq == 0:
-                self.control_seeds = np.random.choice(len(points), 1)
-            self.controls = [np.array(points[i]) for i in self.control_seeds]
+                self.control_random_vals = np.random.choice(len(points), 1)
+            self.controls = [np.array(points[i]) for i in self.control_random_vals]
             for point in self.controls:
                 point_coord = (point / 512 * self.render_size).astype(np.int32)
                 cv2.drawMarker(
                     control_image,
                     tuple(point_coord),
-                    color=(1, 0, 0),
+                    color=(1, 0, 0) if self.control_type == "contact" else (0, 1, 0),
                     markerType=cv2.MARKER_CROSS,
                     markerSize=8,
                     thickness=1,
                 )
+        elif self.control_type == "follow":
+            if self.controls is None or self.control_counter % self.control_update_freq == 0:
+                self.control_random_vals = np.random.uniform(0.05, 0.1, (2))
+            self.controls = self.control_random_vals
         self.control_counter += 1
         # print(self.control_counter, self.controls, self.control_seed)
         return control_image
@@ -82,11 +86,21 @@ class PushTImageControlEnv(PushTImageEnv):
     def _draw_control_signal(self):
         temp_surface = pygame.Surface((self.window_size, self.window_size), pygame.SRCALPHA)
         temp_surface.fill((0, 0, 0, 0))  # Make the surface transparent
-        if self.control_type == "contact":
+        if self.control_type == "contact" or self.control_type == "repulse":
             if self.controls is not None:
                 for point in self.controls:
                     point_coord = (point / 512 * self.window_size).astype(np.int32)
-                    pygame.draw.circle(temp_surface, (255, 0, 0, 128), point_coord, 50)
+                    color = (0, 255, 0, 128) if self.control_type == "contact" else (255, 0, 0, 128)
+                    pygame.draw.circle(temp_surface, color, point_coord, 50)
+        elif self.control_type == "follow":
+            if self.controls is not None:
+                # Draw grid that the agent should follow
+                grid_size_x = int(self.controls[0] * self.window_size)
+                grid_size_y = int(self.controls[1] * self.window_size)
+                for i in range(0, self.window_size, grid_size_x):
+                    pygame.draw.line(temp_surface, (0, 0, 255, 128), (i, 0), (i, self.window_size), 5)
+                for i in range(0, self.window_size, grid_size_y):
+                    pygame.draw.line(temp_surface, (0, 0, 255, 128), (0, i), (self.window_size, i), 5)
         self.window.blit(temp_surface, temp_surface.get_rect())
 
     def _get_obs(self):
