@@ -36,7 +36,7 @@ class PushTControlEnv(PushTEnv):
         ws = self.window_size
         self.control_type = control_type
         self.controls = None
-        self.control_params = {"contact": {"radius": 60}, "repulse": {"radius": 40}, "follow": {"grid": 10}}
+        self.control_params = {"contact": {"radius": 60}, "repulse": {"radius": 40}, "follow": {"grid": 10, "eps": 0.01}}
         self.control_counter = 0
         self.control_update_freq = 10000
         self.is_control = True
@@ -55,6 +55,22 @@ class PushTControlEnv(PushTEnv):
         obs = super().reset()
         self.controls = None
         return obs
+
+    def regularize_act(self, act):
+        if act is not None and self.is_control and self.controls is not None:
+            if self.control_type == "follow":
+                # Regularize the action to be around the grid by eps
+                eps = int(self.control_params[self.control_type]["eps"] * self.window_size)
+                act_x = act[0]
+                act_y = act[1]
+                grid_size_x = int(self.controls[0] * self.window_size)
+                grid_size_y = int(self.controls[1] * self.window_size)
+                round_x = int(round(act_x / grid_size_x) * grid_size_x)
+                round_y = int(round(act_y / grid_size_y) * grid_size_y)
+                res_x = np.clip(act_x - round_x, -eps, eps)
+                res_y = np.clip(act_y - round_y, -eps, eps)
+                act = (round_x + res_x, round_y + res_y)
+        return act
 
     def get_control_image(self):
         """Get control image."""
@@ -83,7 +99,7 @@ class PushTControlEnv(PushTEnv):
                     cv2.circle(control_image, tuple(point_coord), radius, (0, 255, 0) if self.control_type == "contact" else (255, 0, 0), -1)
             elif self.control_type == "follow":
                 if self.controls is None or self.control_counter % self.control_update_freq == 0:
-                    self.control_random_vals = np.random.uniform(0.05, 0.1, (2))
+                    self.control_random_vals = np.random.uniform(0.05, 0.08, (2))
                 # Draw grid that the agent should follow
                 grid_size_x = int(self.control_random_vals[0] * self.render_size)
                 grid_size_y = int(self.control_random_vals[1] * self.render_size)

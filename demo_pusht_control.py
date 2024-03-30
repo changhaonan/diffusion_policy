@@ -92,6 +92,7 @@ def main(output, control, render_size, control_hz):
             # get action from mouse
             # None if mouse is not close to the agent
             act = agent.act(obs)
+            act = env.regularize_act(act)
             if not act is None:
                 # teleop started
                 # state dim 2+3
