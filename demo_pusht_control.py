@@ -30,7 +30,7 @@ def main(output, control, render_size, control_hz):
 
     control_repeat = 3 + 1  # repeat each control for 3 times
     # create replay buffer in read-write mode
-    replay_buffer = ReplayBuffer.create_from_path(output, mode="a")
+    replay_buffer = ReplayBuffer.create_from_path(output.strip(), mode="a")
 
     # create PushT env with control
     env = PushTControlEnv(control_type=control.strip(), render_size=render_size)
@@ -101,6 +101,7 @@ def main(output, control, render_size, control_hz):
                 # for compatibility
                 data = {"img": img, "state": np.float32(state), "action": np.float32(act), "n_contacts": np.float32([info["n_contacts"]]), "control": env.get_control_image()}
                 control_img = data["control"]
+                print(np.max(control_img), np.min(control_img))
                 # Overlay control image on img
                 img = cv2.addWeighted(img, 0.5, control_img, 0.5, 0)
                 cv2.imshow("control", img)
