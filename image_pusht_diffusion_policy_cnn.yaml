@@ -123,7 +123,9 @@ task:
     zarr_path: data/kowndi_pusht_demo_repulse.zarr
     integrate_type: "overlay"
   env_runner:
-    _target_: diffusion_policy.env_runner.pusht_image_runner.PushTImageRunner
+    _target_: diffusion_policy.env_runner.pusht_image_control_runner.PushTImageControlRunner
+    control_type: "repulse"
+    itegrate_type: "overlay"
     fps: 10
     legacy_test: true
     max_steps: 300

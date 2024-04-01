@@ -54,6 +54,7 @@ class PushTControlEnv(PushTEnv):
     def reset(self):
         obs = super().reset()
         self.controls = None
+        self.control_counter = 0
         return obs
 
     def regularize_act(self, act):
@@ -95,7 +96,6 @@ class PushTControlEnv(PushTEnv):
                         points += sample_points_on_shape(shape, 10)  # Sample one point
                 if self.controls is None or self.control_counter % self.control_update_freq == 0:
                     self.control_random_vals = np.random.choice(len(points), 1)
-                    print(f"control_random_vals: {self.control_random_vals}")
                 self.controls = [np.array(points[i]) for i in self.control_random_vals]
                 for point in self.controls:
                     point_coord = (point / 512 * self.render_size).astype(np.int32)
@@ -135,3 +135,26 @@ class PushTControlEnv(PushTEnv):
                 for i in range(0, self.window_size, grid_size_y):
                     pygame.draw.line(temp_surface, (0, 0, 255, 128), (0, i), (self.window_size, i), 5)
         self.window.blit(temp_surface, temp_surface.get_rect())
+
+
+class PushTControlImageEnv(PushTControlEnv):
+    """Compared with control env, this env is used for evaluation."""
+
+    def __init__(self, control_type="contact", legacy=False, block_cog=None, damping=None, render_size=96, render_action=False):
+        super().__init__(control_type, legacy, block_cog, damping, render_size, render_action)
+
+    def _get_obs(self):
+        img = super()._render_frame(mode="rgb_array")
+        control_img = self.get_control_image()
+        agent_pos = np.array(self.agent.position)
+        img_obs = np.moveaxis(img.astype(np.float32) / 255, -1, 0)
+        control_obs = np.moveaxis(control_img.astype(np.float32) / 255, -1, 0)
+        obs = {"image": img_obs, "control": control_obs, "agent_pos": agent_pos}
+        return obs
+
+    def render(self, mode):
+        assert mode == "rgb_array"
+        image = super().render(mode)
+        control_image = self.get_control_image()
+        image = image * 0.5 + control_image * 0.5
+        return image.astype(np.uint8)
