@@ -39,7 +39,7 @@ class PushTControlEnv(PushTEnv):
         self.control_params = {"contact": {"radius": 60}, "repulse": {"radius": 40}, "follow": {"grid": 10, "eps": 0.01}}
         self.control_counter = 0
         self.control_update_freq = 10000
-        self.is_control = True
+        self.is_control = False
         self.observation_space = spaces.Dict(
             {
                 "image": spaces.Box(low=0, high=1, shape=(3, render_size, render_size), dtype=np.float32),

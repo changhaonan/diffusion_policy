@@ -120,7 +120,7 @@ task:
     pad_before: 1
     seed: 42
     val_ratio: 0.02
-    zarr_path: data/kowndi_pusht_demo_repulse.zarr
+    zarr_path: data/kowndi_pusht_demo_repulse_no_control.zarr
     integrate_type: "overlay"
   env_runner:
     _target_: diffusion_policy.env_runner.pusht_image_control_runner.PushTImageControlRunner
