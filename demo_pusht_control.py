@@ -5,12 +5,14 @@ import cv2
 import click
 from diffusion_policy.common.replay_buffer import ReplayBuffer
 from diffusion_policy.env.pusht.pusht_control import PushTControlEnv
+from diffusion_policy.demo_utils.misc_utils import get_data_stats, normalize_data, create_sample_indices, sample_sequence 
+
 import pygame
 
 
 @click.command()
-@click.option("-o", "--output", required=True)
-@click.option("-c", "--control", default="contact", help="contact, repulse, style")
+@click.option("-o", "--output", default='data/kowndi_pusht_demo.zarr', type=str)
+@click.option("-c", "--control", default="repulse", help="contact, repulse, style")
 @click.option("-rs", "--render_size", default=96, type=int)
 @click.option("-hz", "--control_hz", default=10, type=int)
 def main(output, control, render_size, control_hz):
@@ -30,6 +32,7 @@ def main(output, control, render_size, control_hz):
 
     control_repeat = 3 + 1  # repeat each control for 3 times
     # create replay buffer in read-write mode
+    output = output.replace(".zarr", "") +  f"_{control}.zarr" 
     replay_buffer = ReplayBuffer.create_from_path(output, mode="a")
 
     # create PushT env with control
