@@ -11,7 +11,7 @@ import pygame
 
 
 @click.command()
-@click.option("-o", "--output", default='data/kowndi_pusht_demo.zarr', type=str)
+@click.option("-o", "--output", default='data/kowndi_pusht_demo_v0.zarr', type=str)
 @click.option("-c", "--control", default="repulse", help="contact, repulse, style")
 @click.option("-rs", "--render_size", default=96, type=int)
 @click.option("-hz", "--control_hz", default=10, type=int)
