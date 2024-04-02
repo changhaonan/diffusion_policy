@@ -32,6 +32,7 @@ def visualize_dataset(root, wait_time=10):
 
 if __name__ == "__main__":
     root_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
-    src_data = "kowndi_pusht_demo_repulse_no_control.zarr"
+    # src_data = "kowndi_pusht_demo_repulse_no_control.zarr"
+    src_data = "kowndi_pusht_demo_v0_repulse.zarr"
     root = read_from_path(os.path.join(root_dir, src_data))
     visualize_dataset(root)
