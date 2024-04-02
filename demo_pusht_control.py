@@ -30,7 +30,7 @@ def main(output, control, render_size, control_hz):
     Hold "Space" to pause.
     """
 
-    control_repeat = 3 + 1  # repeat each control for 3 times
+    control_repeat = 2  # repeat each control for K times
     # create replay buffer in read-write mode
     output = output.replace(".zarr", "") +  f"_{control}.zarr" 
     replay_buffer = ReplayBuffer.create_from_path(output, mode="a")
@@ -45,11 +45,12 @@ def main(output, control, render_size, control_hz):
         episode = list()
         # record in seed order, starting with 0
         seed = replay_buffer.n_episodes // control_repeat
-        if replay_buffer.n_episodes % control_repeat == 0:
+        if replay_buffer.n_episodes % control_repeat == (control_repeat - 1):
             env.set_control(False)
+            print("No control...")
         else:
             env.set_control(True)
-
+            print("With control...")
         print(f"starting seed {seed}")
 
         # set seed for env
@@ -95,6 +96,7 @@ def main(output, control, render_size, control_hz):
             # get action from mouse
             # None if mouse is not close to the agent
             act = agent.act(obs)
+            act = env.regularize_act(act)
             if not act is None:
                 # teleop started
                 # state dim 2+3
