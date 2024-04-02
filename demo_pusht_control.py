@@ -28,7 +28,7 @@ def main(output, control, render_size, control_hz):
     Hold "Space" to pause.
     """
 
-    control_repeat = 3 + 1  # repeat each control for 3 times
+    control_repeat = 2  # repeat each control for K times
     # create replay buffer in read-write mode
     replay_buffer = ReplayBuffer.create_from_path(output.strip(), mode="a")
 
@@ -42,11 +42,12 @@ def main(output, control, render_size, control_hz):
         episode = list()
         # record in seed order, starting with 0
         seed = replay_buffer.n_episodes // control_repeat
-        if replay_buffer.n_episodes % control_repeat == 0:
+        if replay_buffer.n_episodes % control_repeat == (control_repeat - 1):
             env.set_control(False)
+            print("No control...")
         else:
             env.set_control(True)
-
+            print("With control...")
         print(f"starting seed {seed}")
 
         # set seed for env
@@ -101,7 +102,6 @@ def main(output, control, render_size, control_hz):
                 # for compatibility
                 data = {"img": img, "state": np.float32(state), "action": np.float32(act), "n_contacts": np.float32([info["n_contacts"]]), "control": env.get_control_image()}
                 control_img = data["control"]
-                print(np.max(control_img), np.min(control_img))
                 # Overlay control image on img
                 img = cv2.addWeighted(img, 0.5, control_img, 0.5, 0)
                 cv2.imshow("control", img)

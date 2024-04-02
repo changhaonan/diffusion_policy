@@ -36,7 +36,7 @@ class PushTControlEnv(PushTEnv):
         ws = self.window_size
         self.control_type = control_type
         self.controls = None
-        self.control_params = {"contact": {"radius": 60}, "repulse": {"radius": 40}, "follow": {"grid": 10, "eps": 0.01}}
+        self.control_params = {"contact": {"radius": 60, "sample_points": 2}, "repulse": {"radius": 20, "sample_points": 2}, "follow": {"grid": 10, "eps": 0.01}}
         self.control_counter = 0
         self.control_update_freq = 10000
         self.is_control = False
@@ -93,7 +93,7 @@ class PushTControlEnv(PushTEnv):
                 else:
                     points = []
                     for shape in shape_lists:
-                        points += sample_points_on_shape(shape, 10)  # Sample one point
+                        points += sample_points_on_shape(shape, self.control_params[self.control_type]["sample_points"])  # Sample one point
                 if self.controls is None or self.control_counter % self.control_update_freq == 0:
                     self.control_random_vals = np.random.choice(len(points), 1)
                 self.controls = [np.array(points[i]) for i in self.control_random_vals]
