@@ -103,7 +103,7 @@ class PushTControlEnv(PushTEnv):
                     cv2.circle(control_image, tuple(point_coord), radius, (0, 255, 0) if self.control_type == "contact" else (255, 0, 0), -1)
             elif self.control_type == "follow":
                 if self.controls is None or self.control_counter % self.control_update_freq == 0:
-                    self.control_random_vals = np.random.uniform(0.05, 0.08, (2))
+                    self.control_random_vals = np.random.uniform(0.05, 0.07, (2))
                 # Draw grid that the agent should follow
                 grid_size_x = int(self.control_random_vals[0] * self.render_size)
                 grid_size_y = int(self.control_random_vals[1] * self.render_size)
