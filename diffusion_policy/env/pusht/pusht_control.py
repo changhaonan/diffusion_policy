@@ -47,6 +47,16 @@ class PushTControlEnv(PushTEnv):
                 "agent_pos": spaces.Box(low=0, high=ws, shape=(2,), dtype=np.float32),
             }
         )
+        self.violate = list()  # Measure how many times the agent violates the control
+
+    def _compute_violate(self):
+        agent_pos = np.array(self.agent.position)
+        if self.control_type == "repulse" and self.controls is not None:
+            for point in self.controls:
+                dist = np.linalg.norm(agent_pos - point)
+                if dist < self.control_params[self.control_type]["radius"]:
+                    return 1.0
+        return 0.0
 
     def set_control(self, flag):
         self.is_control = flag
@@ -55,7 +65,14 @@ class PushTControlEnv(PushTEnv):
         obs = super().reset()
         self.controls = None
         self.control_counter = 0
+        self.violate = list()
         return obs
+
+    def step(self, action):
+        action = self.regularize_act(action)
+        obs, reward, done, info = super().step(action)
+        self.violate.append(self._compute_violate())
+        return obs, reward, done, info
 
     def regularize_act(self, act):
         if act is not None and self.is_control and self.controls is not None:

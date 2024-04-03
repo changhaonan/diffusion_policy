@@ -5,13 +5,13 @@ import cv2
 import click
 from diffusion_policy.common.replay_buffer import ReplayBuffer
 from diffusion_policy.env.pusht.pusht_control import PushTControlEnv
-from diffusion_policy.demo_utils.misc_utils import get_data_stats, normalize_data, create_sample_indices, sample_sequence 
+from diffusion_policy.demo_utils.misc_utils import get_data_stats, normalize_data, create_sample_indices, sample_sequence
 
 import pygame
 
 
 @click.command()
-@click.option("-o", "--output", default='data/kowndi_pusht_demo_v0.zarr', type=str)
+@click.option("-o", "--output", default="data/kowndi_pusht_demo_v0.zarr", type=str)
 @click.option("-c", "--control", default="repulse", help="contact, repulse, style")
 @click.option("-rs", "--render_size", default=96, type=int)
 @click.option("-hz", "--control_hz", default=10, type=int)
@@ -32,7 +32,7 @@ def main(output, control, render_size, control_hz):
 
     control_repeat = 2  # repeat each control for K times
     # create replay buffer in read-write mode
-    output = output.replace(".zarr", "") +  f"_{control}.zarr" 
+    output = output.replace(".zarr", "") + f"_{control}.zarr"
     replay_buffer = ReplayBuffer.create_from_path(output, mode="a")
 
     # create PushT env with control
@@ -96,7 +96,6 @@ def main(output, control, render_size, control_hz):
             # get action from mouse
             # None if mouse is not close to the agent
             act = agent.act(obs)
-            act = env.regularize_act(act)
             if not act is None:
                 # teleop started
                 # state dim 2+3

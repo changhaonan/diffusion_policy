@@ -153,6 +153,7 @@ class PushTImageControlRunner(BaseImageRunner):
         # allocate data
         all_video_paths = [None] * n_inits
         all_rewards = [None] * n_inits
+        all_violates = [None] * n_inits
 
         for chunk_idx in range(n_chunks):
             start = chunk_idx * n_envs
@@ -215,11 +216,13 @@ class PushTImageControlRunner(BaseImageRunner):
 
             all_video_paths[this_global_slice] = env.render()[this_local_slice]
             all_rewards[this_global_slice] = env.call("get_attr", "reward")[this_local_slice]
+            all_violates[this_global_slice] = env.call("get_attr", "violate")[this_local_slice]
         # clear out video buffer
         _ = env.reset()
 
         # log
         max_rewards = collections.defaultdict(list)
+        max_violates = collections.defaultdict(list)
         log_data = dict()
         # results reported in the paper are generated using the commented out line below
         # which will only report and average metrics from first n_envs initial condition and seeds
@@ -236,6 +239,9 @@ class PushTImageControlRunner(BaseImageRunner):
             max_rewards[prefix].append(max_reward)
             log_data[prefix + f"sim_max_reward_{seed}"] = max_reward
 
+            max_violate = np.max(all_violates[i])
+            max_violates[prefix].append(max_violate)
+            log_data[prefix + f"sim_max_violate_{seed}"] = max_violate
             # visualize sim
             video_path = all_video_paths[i]
             if video_path is not None:
@@ -245,6 +251,11 @@ class PushTImageControlRunner(BaseImageRunner):
         # log aggregate metrics
         for prefix, value in max_rewards.items():
             name = prefix + "mean_score"
+            value = np.mean(value)
+            log_data[name] = value
+
+        for prefix, value in max_violates.items():
+            name = prefix + "mean_violate"
             value = np.mean(value)
             log_data[name] = value
 
