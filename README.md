@@ -6,11 +6,11 @@ python train.py --config-dir=. --config-name=image_pusht_diffusion_policy_cnn.ya
 ```
 # Diffusion Policy
 
-[[Project page]](https://diffusion-policy.cs.columbia.edu/)
+<!-- [[Project page]](https://diffusion-policy.cs.columbia.edu/)
 [[Paper]](https://diffusion-policy.cs.columbia.edu/#paper)
 [[Data]](https://diffusion-policy.cs.columbia.edu/data/)
 [[Colab (state)]](https://colab.research.google.com/drive/1gxdkgRVfM55zihY9TFLja97cSVZOZq2B?usp=sharing)
-[[Colab (vision)]](https://colab.research.google.com/drive/18GIHeOQ5DyjMN8iIRZL2EKZ0745NLIpg?usp=sharing)
+[[Colab (vision)]](https://colab.research.google.com/drive/18GIHeOQ5DyjMN8iIRZL2EKZ0745NLIpg?usp=sharing) -->
 
 
 [Cheng Chi](http://cheng-chi.github.io/)<sup>1</sup>,
