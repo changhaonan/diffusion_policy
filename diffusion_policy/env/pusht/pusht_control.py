@@ -169,7 +169,7 @@ class PushTControlEnv(PushTEnv):
     def get_control_image(self):
         """Get control image."""
         control_image = np.zeros((self.render_size, self.render_size, 3), dtype=np.float32)
-        if self.is_control:
+        if self.is_control and self.controls is not None:
             if self.control_type == "repulse":
                 for point in self.controls:
                     point_coord = (point / 512 * self.render_size).astype(np.int32)
@@ -193,30 +193,27 @@ class PushTControlEnv(PushTEnv):
     def _draw_control_signal(self):
         temp_surface = pygame.Surface((self.window_size, self.window_size), pygame.SRCALPHA)
         temp_surface.fill((0, 0, 0, 0))  # Make the surface transparent
-        if self.is_control:
+        if self.is_control and self.controls is not None:
             if self.control_type == "repulse":
-                if self.controls is not None:
-                    for point in self.controls:
-                        point_coord = (point / 512 * self.window_size).astype(np.int32)
-                        radius = int(self.control_params[self.control_type]["radius"])
-                        color = (255, 0, 0, 128)
-                        pygame.draw.circle(temp_surface, color, point_coord, radius)
+                for point in self.controls:
+                    point_coord = (point / 512 * self.window_size).astype(np.int32)
+                    radius = int(self.control_params[self.control_type]["radius"])
+                    color = (255, 0, 0, 128)
+                    pygame.draw.circle(temp_surface, color, point_coord, radius)
             elif self.control_type == "follow":
-                if self.controls is not None:
-                    # Draw grid that the agent should follow
-                    grid_size_x = int(self.controls[0] * self.window_size)
-                    grid_size_y = int(self.controls[1] * self.window_size)
-                    for i in range(0, self.window_size, grid_size_x):
-                        pygame.draw.line(temp_surface, (0, 0, 255, 128), (i, 0), (i, self.window_size), 5)
-                    for i in range(0, self.window_size, grid_size_y):
-                        pygame.draw.line(temp_surface, (0, 0, 255, 128), (0, i), (self.window_size, i), 5)
+                # Draw grid that the agent should follow
+                grid_size_x = int(self.controls[0] * self.window_size)
+                grid_size_y = int(self.controls[1] * self.window_size)
+                for i in range(0, self.window_size, grid_size_x):
+                    pygame.draw.line(temp_surface, (0, 0, 255, 128), (i, 0), (i, self.window_size), 5)
+                for i in range(0, self.window_size, grid_size_y):
+                    pygame.draw.line(temp_surface, (0, 0, 255, 128), (0, i), (self.window_size, i), 5)
             elif self.control_type == "region":
-                if self.controls is not None:
-                    min_pos = self.controls[0]
-                    max_pos = self.controls[1]
-                    min_pos = (min_pos / 512 * self.window_size).astype(np.int32)
-                    max_pos = (max_pos / 512 * self.window_size).astype(np.int32)
-                    pygame.draw.rect(temp_surface, (0, 255, 0, 128), (min_pos[0], min_pos[1], max_pos[0] - min_pos[0], max_pos[1] - min_pos[1]))
+                min_pos = self.controls[0]
+                max_pos = self.controls[1]
+                min_pos = (min_pos / 512 * self.window_size).astype(np.int32)
+                max_pos = (max_pos / 512 * self.window_size).astype(np.int32)
+                pygame.draw.rect(temp_surface, (0, 255, 0, 128), (min_pos[0], min_pos[1], max_pos[0] - min_pos[0], max_pos[1] - min_pos[1]))
         self.window.blit(temp_surface, temp_surface.get_rect())
 
 
