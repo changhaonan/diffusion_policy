@@ -27,6 +27,7 @@ class PushTImageControlRunner(BaseImageRunner):
         output_dir,
         control_type="repulse",
         itegrate_type="overlay",
+        default_control=True,
         n_train=10,
         n_train_vis=3,
         train_start_seed=0,
@@ -53,7 +54,7 @@ class PushTImageControlRunner(BaseImageRunner):
         def env_fn():
             return MultiStepWrapper(
                 VideoRecordingWrapper(
-                    PushTControlImageEnv(control_type=control_type, legacy=legacy_test, render_size=render_size),
+                    PushTControlImageEnv(control_type=control_type, default_control=default_control, legacy=legacy_test, render_size=render_size),
                     video_recoder=VideoRecorder.create_h264(fps=fps, codec="h264", input_pix_fmt="rgb24", crf=crf, thread_type="FRAME", thread_count=1),
                     file_path=None,
                     steps_per_render=steps_per_render,

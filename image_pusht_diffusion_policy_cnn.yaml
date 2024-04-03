@@ -126,6 +126,7 @@ task:
     _target_: diffusion_policy.env_runner.pusht_image_control_runner.PushTImageControlRunner
     control_type: "repulse"
     itegrate_type: "overlay"
+    default_control: true
     fps: 10
     legacy_test: true
     max_steps: 300

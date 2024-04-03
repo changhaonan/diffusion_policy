@@ -31,7 +31,7 @@ class PushTControlEnv(PushTEnv):
     - control_type: str, control type, e.g. "contact", "repulse", "follow"
     """
 
-    def __init__(self, control_type="contact", legacy=False, block_cog=None, damping=None, render_size=96, render_action=False):
+    def __init__(self, control_type="contact", default_control=True, legacy=False, block_cog=None, damping=None, render_size=96, render_action=False):
         super().__init__(legacy=legacy, block_cog=block_cog, damping=damping, render_size=render_size, render_action=render_action)
         ws = self.window_size
         self.control_type = control_type
@@ -39,7 +39,7 @@ class PushTControlEnv(PushTEnv):
         self.control_params = {"contact": {"radius": 60, "sample_points": 2}, "repulse": {"radius": 20, "sample_points": 2}, "follow": {"grid": 10, "eps": 0.01}}
         self.control_counter = 0
         self.control_update_freq = 10000
-        self.is_control = False
+        self.is_control = default_control
         self.observation_space = spaces.Dict(
             {
                 "image": spaces.Box(low=0, high=1, shape=(3, render_size, render_size), dtype=np.float32),
@@ -103,7 +103,7 @@ class PushTControlEnv(PushTEnv):
                     cv2.circle(control_image, tuple(point_coord), radius, (0, 255, 0) if self.control_type == "contact" else (255, 0, 0), -1)
             elif self.control_type == "follow":
                 if self.controls is None or self.control_counter % self.control_update_freq == 0:
-                    self.control_random_vals = np.random.uniform(0.05, 0.08, (2))
+                    self.control_random_vals = np.random.uniform(0.05, 0.07, (2))
                 # Draw grid that the agent should follow
                 grid_size_x = int(self.control_random_vals[0] * self.render_size)
                 grid_size_y = int(self.control_random_vals[1] * self.render_size)
@@ -140,8 +140,8 @@ class PushTControlEnv(PushTEnv):
 class PushTControlImageEnv(PushTControlEnv):
     """Compared with control env, this env is used for evaluation."""
 
-    def __init__(self, control_type="contact", legacy=False, block_cog=None, damping=None, render_size=96, render_action=False):
-        super().__init__(control_type, legacy, block_cog, damping, render_size, render_action)
+    def __init__(self, control_type="contact", default_control=True, legacy=False, block_cog=None, damping=None, render_size=96, render_action=False):
+        super().__init__(control_type, default_control, legacy, block_cog, damping, render_size, render_action)
 
     def _get_obs(self):
         img = super()._render_frame(mode="rgb_array")
