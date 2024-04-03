@@ -28,15 +28,15 @@ def sample_points_on_shape(shape, points_per_edge):
 
 class PushTControlEnv(PushTEnv):
     """Compared with image env, this env includes control image as observation.
-    - control_type: str, control type, e.g. "contact", "repulse", "follow"
+    - control_type: str, control type, e.g. "region", "repulse", "follow"
     """
 
-    def __init__(self, control_type="contact", default_control=True, legacy=False, block_cog=None, damping=None, render_size=96, render_action=False):
+    def __init__(self, control_type="region", default_control=True, legacy=False, block_cog=None, damping=None, render_size=96, render_action=False):
         super().__init__(legacy=legacy, block_cog=block_cog, damping=damping, render_size=render_size, render_action=render_action)
         ws = self.window_size
         self.control_type = control_type
         self.controls = None
-        self.control_params = {"contact": {"radius": 60, "sample_points": 2}, "repulse": {"radius": 20, "sample_points": 2}, "follow": {"grid": 10, "eps": 0.01}}
+        self.control_params = {"region": {"min_size": 200, "max_size": 400, "shape_offset": 100}, "repulse": {"radius": 20, "sample_points": 2}, "follow": {"grid": 10, "eps": 0.01}}
         self.control_counter = 0
         self.control_update_freq = 10000
         self.is_control = default_control
@@ -98,8 +98,8 @@ class PushTControlEnv(PushTEnv):
         """Get control image."""
         control_image = np.zeros((self.render_size, self.render_size, 3), dtype=np.float32)
         if self.is_control:
-            if self.control_type == "contact" or self.control_type == "repulse":
-                # Sample a point on block
+            if self.control_type == "repulse":
+                # Repulse the agent from a point on the shape
                 shape_lists = []
                 for shape in self.space.shapes:
                     if hasattr(shape, "is_target_object") and shape.is_target_object:
@@ -117,8 +117,43 @@ class PushTControlEnv(PushTEnv):
                 for point in self.controls:
                     point_coord = (point / 512 * self.render_size).astype(np.int32)
                     radius = int(self.control_params[self.control_type]["radius"] / 512 * self.render_size)
-                    cv2.circle(control_image, tuple(point_coord), radius, (0, 255, 0) if self.control_type == "contact" else (255, 0, 0), -1)
+                    cv2.circle(control_image, tuple(point_coord), radius, (255, 0, 0), -1)
+            elif self.control_type == "region":
+                # Control the agent to stay in a region
+                if self.controls is None:
+                    min_size = self.control_params[self.control_type]["min_size"]
+                    max_size = self.control_params[self.control_type]["max_size"]
+                    shape_offset = self.control_params[self.control_type]["shape_offset"]
+                    # Control region should be a bbox includes the block pos and the goal pos
+                    block_pos = self.block.position
+                    goal_pos = self.goal_pose[:2]
+                    min_pos = np.minimum(block_pos, goal_pos)
+                    min_pos = np.maximum(min_pos - shape_offset, 0)
+                    max_pos = np.maximum(block_pos, goal_pos)
+                    max_pos = np.minimum(max_pos + shape_offset, 512)
+                    # Initial bbox size
+                    bbox_size = max_pos - min_pos
+                    if np.any(bbox_size < min_size):
+                        size_diff = np.maximum(min_size - bbox_size, 0)
+                        min_pos -= size_diff / 2
+                        max_pos += size_diff / 2
+
+                    # Randomly adjust bbox size up to max_size constraint, ensuring it includes the original points
+                    for i in range(2):  # For both x and y dimensions
+                        max_expand = max_size - (max_pos[i] - min_pos[i])
+                        if max_expand > 0:
+                            expand = np.random.uniform(0, max_expand)
+                            # Randomly distribute the expansion on both sides
+                            expand_min = np.random.uniform(0, expand)
+                            expand_max = expand - expand_min
+                            min_pos[i] -= expand_min
+                            max_pos[i] += expand_max
+                    bbox = [min_pos, max_pos]  # This is your randomized bbox
+                    self.controls = bbox
+                    # Generate image
+                    cv2.rectangle(control_image, tuple((min_pos / 512 * self.render_size).astype(np.int32)), tuple((max_pos / 512 * self.render_size).astype(np.int32)), (0, 255, 0), -1)
             elif self.control_type == "follow":
+                # Follow the grid
                 if self.controls is None or self.control_counter % self.control_update_freq == 0:
                     self.control_random_vals = np.random.uniform(0.05, 0.07, (2))
                 # Draw grid that the agent should follow
@@ -135,12 +170,12 @@ class PushTControlEnv(PushTEnv):
     def _draw_control_signal(self):
         temp_surface = pygame.Surface((self.window_size, self.window_size), pygame.SRCALPHA)
         temp_surface.fill((0, 0, 0, 0))  # Make the surface transparent
-        if self.control_type == "contact" or self.control_type == "repulse":
+        if self.control_type == "repulse":
             if self.controls is not None:
                 for point in self.controls:
                     point_coord = (point / 512 * self.window_size).astype(np.int32)
                     radius = int(self.control_params[self.control_type]["radius"])
-                    color = (0, 255, 0, 128) if self.control_type == "contact" else (255, 0, 0, 128)
+                    color = (255, 0, 0, 128)
                     pygame.draw.circle(temp_surface, color, point_coord, radius)
         elif self.control_type == "follow":
             if self.controls is not None:
@@ -151,13 +186,20 @@ class PushTControlEnv(PushTEnv):
                     pygame.draw.line(temp_surface, (0, 0, 255, 128), (i, 0), (i, self.window_size), 5)
                 for i in range(0, self.window_size, grid_size_y):
                     pygame.draw.line(temp_surface, (0, 0, 255, 128), (0, i), (self.window_size, i), 5)
+        elif self.control_type == "region":
+            if self.controls is not None:
+                min_pos = self.controls[0]
+                max_pos = self.controls[1]
+                min_pos = (min_pos / 512 * self.window_size).astype(np.int32)
+                max_pos = (max_pos / 512 * self.window_size).astype(np.int32)
+                pygame.draw.rect(temp_surface, (0, 255, 0, 128), (min_pos[0], min_pos[1], max_pos[0] - min_pos[0], max_pos[1] - min_pos[1]))
         self.window.blit(temp_surface, temp_surface.get_rect())
 
 
 class PushTControlImageEnv(PushTControlEnv):
     """Compared with control env, this env is used for evaluation."""
 
-    def __init__(self, control_type="contact", default_control=True, legacy=False, block_cog=None, damping=None, render_size=96, render_action=False):
+    def __init__(self, control_type="region", default_control=True, legacy=False, block_cog=None, damping=None, render_size=96, render_action=False):
         super().__init__(control_type, default_control, legacy, block_cog, damping, render_size, render_action)
 
     def _get_obs(self):
