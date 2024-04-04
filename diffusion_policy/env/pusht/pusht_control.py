@@ -63,8 +63,10 @@ class PushTControlEnv(PushTEnv):
             grid_size_y = int(self.controls[1] * self.window_size)
             dist_x = agent_pos[0] % grid_size_x
             dist_y = agent_pos[1] % grid_size_y
+            dist_x = min(dist_x, grid_size_x - dist_x)
+            dist_y = min(dist_y, grid_size_y - dist_y)
             eps = int(self.control_params["follow"]["eps"] * self.window_size)
-            if dist_x > eps or dist_y > eps:
+            if dist_x > eps and dist_y > eps:
                 return 1.0
         return 0.0
 
