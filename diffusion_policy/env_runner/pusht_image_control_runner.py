@@ -138,6 +138,7 @@ class PushTImageControlRunner(BaseImageRunner):
         self.past_action = past_action
         self.max_steps = max_steps
         self.tqdm_interval_sec = tqdm_interval_sec
+        self.control_type = control_type
         self.integrate_type = itegrate_type
 
     def run(self, policy: BaseImagePolicy):
@@ -239,7 +240,10 @@ class PushTImageControlRunner(BaseImageRunner):
             max_rewards[prefix].append(max_reward)
             log_data[prefix + f"sim_max_reward_{seed}"] = max_reward
 
-            max_violate = np.max(all_violates[i])
+            if self.control_type == "follow":
+                max_violate = np.mean(all_violates[i])
+            else:
+                max_violate = np.max(all_violates[i])
             max_violates[prefix].append(max_violate)
             log_data[prefix + f"sim_max_violate_{seed}"] = max_violate
             # visualize sim
