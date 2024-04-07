@@ -120,11 +120,11 @@ task:
     pad_before: 1
     seed: 42
     val_ratio: 0.02
-    zarr_path: data/kowndi_pusht_demo_v0_follow.zarr
+    zarr_path: data/kowndi_pusht_demo_v0_region_aug0.zarr
     integrate_type: "overlay"
   env_runner:
     _target_: diffusion_policy.env_runner.pusht_image_control_runner.PushTImageControlRunner
-    control_type: "follow"
+    control_type: "region"
     itegrate_type: "overlay"
     default_control: true
     fps: 10

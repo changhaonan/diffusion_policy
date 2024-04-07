@@ -5,7 +5,7 @@ import pygame
 import cv2
 from gym import spaces
 from diffusion_policy.env.pusht.pusht_env import PushTEnv
-
+from math import cos, sin
 
 def sample_points_on_shape(shape, points_per_edge):
     sampled_points = []
@@ -25,6 +25,44 @@ def sample_points_on_shape(shape, points_per_edge):
 
     return sampled_points
 
+def rotate_rectangle(top_left: list, bottom_right: list, phi: float, rot_vec=None):
+    # Calculate the center of the rectangle
+    cx = (top_left[0] + bottom_right[0]) / 2
+    cy = (top_left[1] + bottom_right[1]) / 2
+    
+    # Define the corners of the rectangle relative to the center
+    corners = [
+        (top_left[0] - cx, top_left[1] - cy),  # Top-left
+        (bottom_right[0] - cx, top_left[1] - cy),  # Top-right
+        (bottom_right[0] - cx, bottom_right[1] - cy),  # Bottom-right
+        (top_left[0] - cx, bottom_right[1] - cy)  # Bottom-left
+    ]
+    min_x, min_y = np.inf, np.inf
+    max_x, max_y = -np.inf, -np.inf
+    if rot_vec[1]*rot_vec[0] > 0:
+        for x, y in corners:
+            x_rotated = cx + x * cos(phi) - y * sin(phi) 
+            y_rotated = cy - x * sin(phi) + y * cos(phi) 
+            min_x = min(min_x, x_rotated)
+            min_y = min(min_y, y_rotated)
+            max_x = max(max_x, x_rotated)
+            max_y = max(max_y, y_rotated)
+        min_x -= 100
+        min_y -= 50
+        max_x += 50
+        max_y += 100
+    else:
+        # Rotate each corner
+        for x, y in corners:
+            x_rotated = cx + x * cos(phi) - y * sin(phi)
+            y_rotated = cy + x * sin(phi) + y * cos(phi)
+            min_x = min(min_x, x_rotated)
+            min_y = min(min_y, y_rotated)
+            max_x = max(max_x, x_rotated)
+            max_y = max(max_y, y_rotated)
+    rotated_corners = [(min_x, min_y), (max_x, max_y)]
+    
+    return np.array(rotated_corners)
 
 class PushTControlEnv(PushTEnv):
     """Compared with image env, this env includes control image as observation.
@@ -37,7 +75,12 @@ class PushTControlEnv(PushTEnv):
         self.control_type = control_type
         self.controls = None
         self.control_random_vals = None
-        self.control_params = {"region": {"min_size": 200, "max_size": 400, "shape_offset": 100}, "repulse": {"radius": 20, "sample_points": 2}, "follow": {"grid": 10, "eps": 0.01}}
+        self.control_params = {
+                                "region": {"min_size": 200, "max_size": 400, "shape_offset": 100}, 
+                                "repulse": {"radius": 20, "sample_points": 2}, 
+                                "follow": {"grid": 10, "eps": 0.01},
+                                "augmentation": {"min_offset": (-140, -130), "max_offset": (140, 130)}
+                              }
         self.control_counter = 0
         self.control_update_freq = 10000
         self.is_control = default_control
@@ -82,6 +125,10 @@ class PushTControlEnv(PushTEnv):
         self._init_control()
         return obs
 
+    
+
+
+    
     def _init_control(self):
         # Generate control values
         seed = self._seed
@@ -133,6 +180,12 @@ class PushTControlEnv(PushTEnv):
             self.controls = bbox
         elif self.control_type == "follow":
             self.controls = rs.uniform(0.05, 0.07, (2))
+        elif self.control_type == "augmentation":
+            block_pos = self.block.position
+            min_pos = np.maximum(block_pos + self.control_params[self.control_type]["min_offset"], 0)
+            max_pos = np.minimum(block_pos + self.control_params[self.control_type]["max_offset"], 512)
+            self.controls = [min_pos, max_pos]
+            pass
 
     def _update_control(self):
         if self.control_type == "repulse":
@@ -149,6 +202,12 @@ class PushTControlEnv(PushTEnv):
                 for shape in shape_lists:
                     points += sample_points_on_shape(shape, self.control_params[self.control_type]["sample_points"])  # Sample one point
             self.controls = [np.array(points[i]) for i in self.control_random_vals]
+        elif self.control_type == "augmentation":
+            block_pos = self.block.position
+            min_pos = np.maximum(block_pos + self.control_params[self.control_type]["min_offset"], 0)
+            max_pos = np.minimum(block_pos + self.control_params[self.control_type]["max_offset"], 512)
+            self.controls = [min_pos, max_pos]
+            pass
 
     def step(self, action):
         action = self.regularize_act(action)
@@ -197,7 +256,9 @@ class PushTControlEnv(PushTEnv):
                     cv2.line(control_image, (i, 0), (i, self.render_size), (0, 0, 255), 1)
                 for i in range(0, self.render_size, grid_size_y):
                     cv2.line(control_image, (0, i), (self.render_size, i), (0, 0, 255), 1)
-
+            elif self.control_type == "augmentation":
+                cv2.rectangle(control_image, tuple((self.controls[0] / 512 * self.render_size).astype(np.int32)), tuple((self.controls[1] / 512 * self.render_size).astype(np.int32)), (0, 255, 0), -1)
+                pass
             self.control_counter += 1
         return control_image.astype(np.uint8)
 
@@ -220,6 +281,12 @@ class PushTControlEnv(PushTEnv):
                 for i in range(0, self.window_size, grid_size_y):
                     pygame.draw.line(temp_surface, (0, 0, 255, 128), (0, i), (self.window_size, i), 5)
             elif self.control_type == "region":
+                min_pos = self.controls[0]
+                max_pos = self.controls[1]
+                min_pos = (min_pos / 512 * self.window_size).astype(np.int32)
+                max_pos = (max_pos / 512 * self.window_size).astype(np.int32)
+                pygame.draw.rect(temp_surface, (0, 255, 0, 128), (min_pos[0], min_pos[1], max_pos[0] - min_pos[0], max_pos[1] - min_pos[1]))
+            elif self.control_type == "augmentation":
                 min_pos = self.controls[0]
                 max_pos = self.controls[1]
                 min_pos = (min_pos / 512 * self.window_size).astype(np.int32)
