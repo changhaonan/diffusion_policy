@@ -34,6 +34,7 @@ def main(checkpoint, output_dir, device):
     cfg = payload["cfg"]
     # HACK: replace cfg for testing
     cfg.task.env_runner._target_ = "diffusion_policy.env_runner.pusht_image_control_runner.PushTImageControlRunner"
+    cfg.task.env_runner.control_type = "follow"
     # END HACK
     cls = hydra.utils.get_class(cfg._target_)
     workspace = cls(cfg, output_dir=output_dir)
