@@ -5,6 +5,7 @@ import pygame
 import cv2
 from gym import spaces
 from diffusion_policy.env.pusht.pusht_env import PushTEnv
+from math import cos, sin
 
 
 def sample_points_on_shape(shape, points_per_edge):
@@ -37,7 +38,11 @@ class PushTControlEnv(PushTEnv):
         self.control_type = control_type
         self.controls = None
         self.control_random_vals = None
-        self.control_params = {"region": {"min_size": 200, "max_size": 400, "shape_offset": 100}, "repulse": {"radius": 20, "sample_points": 2}, "follow": {"grid": 10, "eps": 0.01}}
+        self.control_params = {
+            "region": {"min_size": 200, "max_size": 400, "shape_offset": 100},
+            "repulse": {"radius": 20, "sample_points": 2},
+            "follow": {"grid": 10, "eps": 0.01},
+        }
         self.control_counter = 0
         self.control_update_freq = 10000
         self.is_control = default_control
@@ -63,8 +68,10 @@ class PushTControlEnv(PushTEnv):
             grid_size_y = int(self.controls[1] * self.window_size)
             dist_x = agent_pos[0] % grid_size_x
             dist_y = agent_pos[1] % grid_size_y
+            dist_x = min(dist_x, grid_size_x - dist_x)
+            dist_y = min(dist_y, grid_size_y - dist_y)
             eps = int(self.control_params["follow"]["eps"] * self.window_size)
-            if dist_x > eps or dist_y > eps:
+            if dist_x > eps and dist_y > eps:
                 return 1.0
         return 0.0
 
@@ -195,7 +202,6 @@ class PushTControlEnv(PushTEnv):
                     cv2.line(control_image, (i, 0), (i, self.render_size), (0, 0, 255), 1)
                 for i in range(0, self.render_size, grid_size_y):
                     cv2.line(control_image, (0, i), (self.render_size, i), (0, 0, 255), 1)
-
             self.control_counter += 1
         return control_image.astype(np.uint8)
 
