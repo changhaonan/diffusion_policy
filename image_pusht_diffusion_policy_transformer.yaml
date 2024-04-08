@@ -115,7 +115,7 @@ task:
   env_runner:
     _target_: diffusion_policy.env_runner.pusht_image_control_runner.PushTImageControlRunner
     control_type: "region"
-    itegrate_type: "overlay"
+    integrate_type: "overlay"
     default_control: true
     fps: 10
     legacy_test: true

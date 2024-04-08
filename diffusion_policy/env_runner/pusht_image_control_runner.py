@@ -26,7 +26,7 @@ class PushTImageControlRunner(BaseImageRunner):
         self,
         output_dir,
         control_type="repulse",
-        itegrate_type="overlay",
+        integrate_type="overlay",
         default_control=True,
         n_train=10,
         n_train_vis=3,
@@ -139,7 +139,7 @@ class PushTImageControlRunner(BaseImageRunner):
         self.max_steps = max_steps
         self.tqdm_interval_sec = tqdm_interval_sec
         self.control_type = control_type
-        self.integrate_type = itegrate_type
+        self.integrate_type = integrate_type
 
     def run(self, policy: BaseImagePolicy):
         device = policy.device
