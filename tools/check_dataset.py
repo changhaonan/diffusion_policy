@@ -18,6 +18,7 @@ def visualize_dataset(root, wait_time=18):
     data = root["data"]
     meta = root["meta"]
     episode_ends = np.array(meta["episode_ends"])
+    print(f"Number of episodes: {len(episode_ends)}")
     for i in range(0, len(episode_ends), 1):
         if i == 0:
             start = 0
