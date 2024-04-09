@@ -43,10 +43,14 @@ class ControlDiffusionUnetHybridImagePolicy(BaseImagePolicy):
         obs_encoder_group_norm=False,
         eval_fixed_crop=False,
         # parameters passed to step,
-        integrate_type="overlay",
+        integrate_type="concat",
         only_mid_control=False,
         **kwargs,
     ):
+        """Integrate type:
+        1. concat: concatenate obs and control features.
+        2. controlnet: use to apply explicit control signal.
+        """
         super().__init__()
 
         # parse shape_meta
@@ -116,6 +120,10 @@ class ControlDiffusionUnetHybridImagePolicy(BaseImagePolicy):
 
         # create diffusion model
         obs_feature_dim, control_feature_dim = self._compute_obs_control_shape(obs_encoder)
+        if integrate_type == "concat":
+            obs_feature_dim += control_feature_dim
+            control_feature_dim = None
+
         input_dim = action_dim + obs_feature_dim
         global_cond_dim = None
         if obs_as_global_cond:
@@ -124,7 +132,7 @@ class ControlDiffusionUnetHybridImagePolicy(BaseImagePolicy):
 
         model = ControlUnet1D(
             input_dim=input_dim,
-            control_cond_dim=control_feature_dim * n_obs_steps,
+            control_cond_dim=control_feature_dim * n_obs_steps if control_feature_dim is not None else None,
             only_mid_control=only_mid_control,
             local_cond_dim=None,
             global_cond_dim=global_cond_dim,
@@ -155,10 +163,6 @@ class ControlDiffusionUnetHybridImagePolicy(BaseImagePolicy):
 
         ################################ Control related parameters ################################
         self.integrate_type = integrate_type
-        if self.integrate_type == "overlay" or self.integrate_type == "concat":
-            self.control_model = None  # control model is not used
-        else:
-            raise NotImplementedError(f"integrate_type {self.integrate_type} not supported")
         assert self.obs_as_global_cond, "control diffusion policy requires obs_as_global_cond=True"
 
         print("Diffusion params: %e" % sum(p.numel() for p in self.model.parameters()))

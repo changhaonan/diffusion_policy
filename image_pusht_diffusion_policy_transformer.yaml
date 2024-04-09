@@ -111,11 +111,9 @@ task:
     seed: 42
     val_ratio: 0.02
     zarr_path: data/kowndi_pusht_demo_v0_region_aug0.zarr
-    integrate_type: "overlay"
   env_runner:
     _target_: diffusion_policy.env_runner.pusht_image_control_runner.PushTImageControlRunner
     control_type: "region"
-    integrate_type: "overlay"
     default_control: true
     fps: 10
     legacy_test: true

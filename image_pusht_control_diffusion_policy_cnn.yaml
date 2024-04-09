@@ -64,7 +64,7 @@ policy:
   - 1024
   - 2048
   eval_fixed_crop: true
-  integrate_type: "overlay"
+  integrate_type: "controlnet"
   horizon: 16
   kernel_size: 5
   n_action_steps: 8
@@ -128,11 +128,9 @@ task:
     seed: 42
     val_ratio: 0.02
     zarr_path: data/kowndi_pusht_demo_repulse.zarr
-    integrate_type: "overlay"
   env_runner:
     _target_: diffusion_policy.env_runner.pusht_image_control_runner.PushTImageControlRunner
     control_type: "repulse"
-    integrate_type: "overlay"
     default_control: true
     fps: 10
     legacy_test: true

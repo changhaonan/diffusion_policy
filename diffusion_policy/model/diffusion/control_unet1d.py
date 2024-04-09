@@ -27,29 +27,31 @@ class ControlUnet1D(ConditionalUnet1D):
         cond_predict_scale=False,
     ):
         super().__init__(input_dim, local_cond_dim, global_cond_dim, diffusion_step_embed_dim, down_dims, kernel_size, n_groups, cond_predict_scale)
-        all_dims = [input_dim] + list(down_dims)
-        start_dim = down_dims[0]
-
-        dsed = diffusion_step_embed_dim
-        cond_dim = dsed
-        if control_cond_dim is not None:
-            cond_dim += control_cond_dim
-
-        in_out = list(zip(all_dims[:-1], all_dims[1:]))
-
-        self.control_modules = nn.ModuleList([])
-        for ind, (dim_in, dim_out) in enumerate(in_out):
-            is_last = ind >= (len(in_out) - 1)
-            self.control_modules.append(
-                nn.ModuleList(
-                    [
-                        ConditionalResidualBlock1D(dim_in, dim_out, cond_dim=cond_dim, kernel_size=kernel_size, n_groups=n_groups, cond_predict_scale=cond_predict_scale),
-                        ConditionalResidualBlock1D(dim_out, dim_out, cond_dim=cond_dim, kernel_size=kernel_size, n_groups=n_groups, cond_predict_scale=cond_predict_scale),
-                        Downsample1d(dim_out) if not is_last else nn.Identity(),
-                    ]
-                )
-            )
         self.only_mid_control = only_mid_control
+        if control_cond_dim is None:
+            # No explicit control
+            self.control_modules = nn.ModuleList([])
+        else:
+            all_dims = [input_dim] + list(down_dims)
+            start_dim = down_dims[0]
+
+            dsed = diffusion_step_embed_dim
+            cond_dim = dsed + control_cond_dim
+
+            in_out = list(zip(all_dims[:-1], all_dims[1:]))
+
+            self.control_modules = nn.ModuleList([])
+            for ind, (dim_in, dim_out) in enumerate(in_out):
+                is_last = ind >= (len(in_out) - 1)
+                self.control_modules.append(
+                    nn.ModuleList(
+                        [
+                            ConditionalResidualBlock1D(dim_in, dim_out, cond_dim=cond_dim, kernel_size=kernel_size, n_groups=n_groups, cond_predict_scale=cond_predict_scale),
+                            ConditionalResidualBlock1D(dim_out, dim_out, cond_dim=cond_dim, kernel_size=kernel_size, n_groups=n_groups, cond_predict_scale=cond_predict_scale),
+                            Downsample1d(dim_out) if not is_last else nn.Identity(),
+                        ]
+                    )
+                )
         logger.info("number of parameters: %e after add control", sum(p.numel() for p in self.parameters()))
 
     def forward(self, sample: torch.Tensor, timestep: Union[torch.Tensor, float, int], control_cond=None, global_cond=None, **kwargs):
@@ -102,7 +104,8 @@ class ControlUnet1D(ConditionalUnet1D):
         for mid_module in self.mid_modules:
             x = mid_module(x, global_feature)
 
-        x += h_c.pop()  # mid control
+        if h_c:
+            x += h_c.pop()  # mid control
 
         for idx, (resnet, resnet2, upsample) in enumerate(self.up_modules):
             x = torch.cat((x, h.pop()), dim=1)
@@ -113,7 +116,7 @@ class ControlUnet1D(ConditionalUnet1D):
             # Therefore it is left as a comment.
             x = resnet2(x, global_feature)
             x = upsample(x)
-            if not self.only_mid_control:
+            if not self.only_mid_control and h_c:
                 x += h_c.pop()
 
         x = self.final_conv(x)

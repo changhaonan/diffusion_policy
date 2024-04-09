@@ -26,7 +26,6 @@ class PushTImageControlRunner(BaseImageRunner):
         self,
         output_dir,
         control_type="repulse",
-        integrate_type="overlay",
         default_control=True,
         n_train=10,
         n_train_vis=3,
@@ -139,7 +138,6 @@ class PushTImageControlRunner(BaseImageRunner):
         self.max_steps = max_steps
         self.tqdm_interval_sec = tqdm_interval_sec
         self.control_type = control_type
-        self.integrate_type = integrate_type
 
     def run(self, policy: BaseImagePolicy):
         device = policy.device
@@ -185,14 +183,6 @@ class PushTImageControlRunner(BaseImageRunner):
                 if self.past_action and (past_action is not None):
                     # TODO: not tested
                     np_obs_dict["past_action"] = past_action[:, -(self.n_obs_steps - 1) :].astype(np.float32)
-
-                # operate integrate
-                if self.integrate_type == "overlay":
-                    control = np_obs_dict["control"]
-                    image = np_obs_dict["image"]
-                    image = image * 0.5 + control * 0.5
-                    np_obs_dict["image"] = image
-                    np_obs_dict["control"] = control
 
                 # device transfer
                 obs_dict = dict_apply(np_obs_dict, lambda x: torch.from_numpy(x).to(device=device))

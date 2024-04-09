@@ -12,28 +12,20 @@ from diffusion_policy.dataset.pusht_image_dataset import PushTImageDataset
 
 
 class PushTControlDataset(PushTImageDataset):
-    def __init__(self, zarr_path, horizon=1, pad_before=0, pad_after=0, seed=42, val_ratio=0.0, max_train_episodes=None, integrate_type="overlay"):
+    def __init__(self, zarr_path, horizon=1, pad_before=0, pad_after=0, seed=42, val_ratio=0.0, max_train_episodes=None):
         super().__init__(zarr_path=zarr_path, horizon=horizon, pad_before=pad_before, pad_after=pad_after, seed=seed, val_ratio=val_ratio, max_train_episodes=max_train_episodes)
         self.replay_buffer = ReplayBuffer.copy_from_path(zarr_path, keys=["img", "state", "action", "control"])
         val_mask = get_val_mask(n_episodes=self.replay_buffer.n_episodes, val_ratio=val_ratio, seed=seed)
         train_mask = ~val_mask
         train_mask = downsample_mask(mask=train_mask, max_n=max_train_episodes, seed=seed)
         self.sampler = SequenceSampler(replay_buffer=self.replay_buffer, sequence_length=horizon, pad_before=pad_before, pad_after=pad_after, episode_mask=train_mask)
-        self.integrate_type = integrate_type
 
     def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
         sample = self.sampler.sample_sequence(idx)
         data = self._sample_to_data(sample)
         # Add control to the data
-        if self.integrate_type == "overlay":
-            # Overlay control image on top of the image
-            control = np.moveaxis(sample["control"], -1, 1) / 255
-            image = data["obs"]["image"]
-            image = image * 0.5 + control * 0.5
-            data["obs"]["image"] = image
-            data["obs"]["control"] = control
-        else:
-            raise NotImplementedError(f"Integrate type {self.integrate_type} not supported")
+        control = np.moveaxis(sample["control"], -1, 1) / 255
+        data["obs"]["control"] = control
         torch_data = dict_apply(data, torch.from_numpy)
         return torch_data
 
@@ -49,7 +41,7 @@ if __name__ == "__main__":
 
     root_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     zarr_path = os.path.join(root_path, "data/kowndi_pusht_demo_repulse.zarr")
-    dataset = PushTControlDataset(zarr_path=zarr_path, horizon=1, pad_before=0, pad_after=0, seed=42, val_ratio=0.0, max_train_episodes=None, integrate_type="overlay")
+    dataset = PushTControlDataset(zarr_path=zarr_path, horizon=1, pad_before=0, pad_after=0, seed=42, val_ratio=0.0, max_train_episodes=None)
     for i in range(len(dataset)):
         print(f"Processing {i}/{len(dataset)}")
         control = dataset[i]["obs"]["control"].cpu().numpy()[0].transpose(1, 2, 0)
