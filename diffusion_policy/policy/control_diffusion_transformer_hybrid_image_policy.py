@@ -10,6 +10,7 @@ from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
 from diffusion_policy.model.common.normalizer import LinearNormalizer
 from diffusion_policy.policy.base_image_policy import BaseImagePolicy
 from diffusion_policy.model.diffusion.transformer_for_diffusion import TransformerForDiffusion
+from diffusion_policy.model.diffusion.dit_model import DiTModel
 from diffusion_policy.model.diffusion.mask_generator import LowdimMaskGenerator
 from diffusion_policy.common.robomimic_config_util import get_robomimic_config
 from robomimic.algo import algo_factory
@@ -130,7 +131,7 @@ class ControlDiffusionTransformerHybridImagePolicy(BaseImagePolicy):
         output_dim = input_dim
         cond_dim = obs_feature_dim if obs_as_cond else 0
 
-        model = TransformerForDiffusion(
+        model = DiTModel(
             input_dim=input_dim,
             output_dim=output_dim,
             horizon=horizon,
@@ -245,7 +246,7 @@ class ControlDiffusionTransformerHybridImagePolicy(BaseImagePolicy):
         cond = None
         cond_data = None
         cond_mask = None
-        
+
         this_nobs = dict_apply(nobs, lambda x: x[:, :To, ...].reshape(-1, *x.shape[2:]))
         nobs_features = self.obs_encoder(this_nobs)
         # reshape back to B, To, Do
@@ -255,7 +256,7 @@ class ControlDiffusionTransformerHybridImagePolicy(BaseImagePolicy):
             shape = (B, self.n_action_steps, Da)
         cond_data = torch.zeros(size=shape, device=device, dtype=dtype)
         cond_mask = torch.zeros_like(cond_data, dtype=torch.bool)
-        
+
         # run sampling
         nsample = self.conditional_sample(cond_data, cond_mask, cond=cond, **self.kwargs)
 
@@ -296,7 +297,7 @@ class ControlDiffusionTransformerHybridImagePolicy(BaseImagePolicy):
         # handle different ways of passing observation
         cond = None
         trajectory = nactions
-        
+
         # reshape B, T, ... to B*T
         this_nobs = dict_apply(nobs, lambda x: x[:, :To, ...].reshape(-1, *x.shape[2:]))
         nobs_features = self.obs_encoder(this_nobs)
@@ -306,7 +307,7 @@ class ControlDiffusionTransformerHybridImagePolicy(BaseImagePolicy):
             start = To - 1
             end = start + self.n_action_steps
             trajectory = nactions[:, start:end]
-        
+
         # generate impainting mask
         if self.pred_action_steps_only:
             condition_mask = torch.zeros_like(trajectory, dtype=torch.bool)
