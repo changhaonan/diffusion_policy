@@ -37,7 +37,7 @@ logging:
   - default
 multi_run:
   run_dir: /common/users/hc856/Project/diffusion_policy/data/outputs/train_control_diffusion_unet_hybrid_pusht_image
-  wandb_name_base: 2023.01.16-20.20.06_train_diffusion_unet_hybrid_pusht_image
+  wandb_name_base: train_diffusion_unet_hybrid_pusht_image
 n_action_steps: 8
 n_latency_steps: 0
 n_obs_steps: 2
@@ -165,6 +165,11 @@ task:
         - 96
         - 96
         type: rgb
+      control:
+        shape:
+        - 3
+        - 96
+        - 96
 task_name: pusht_image
 training:
   checkpoint_every: 50
