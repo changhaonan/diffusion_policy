@@ -175,3 +175,6 @@ class DiTModel(ModuleAttrMixin):
         for block in self.dit_blocks:
             nn.init.constant_(block.adaLN_modulation[-1].weight, 0)
             nn.init.constant_(block.adaLN_modulation[-1].bias, 0)
+
+    def get_optim_groups(self):
+        return [{"params": self.parameters()}]
