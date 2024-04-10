@@ -6,6 +6,10 @@ import cv2
 from gym import spaces
 from diffusion_policy.env.pusht.pusht_env import PushTEnv
 from math import cos, sin
+import collections
+import pymunk
+import pymunk.pygame_util
+from pymunk.vec2d import Vec2d
 
 
 def sample_points_on_shape(shape, points_per_edge):
@@ -230,6 +234,20 @@ class PushTControlEnv(PushTEnv):
                 max_pos = (max_pos / 512 * self.window_size).astype(np.int32)
                 pygame.draw.rect(temp_surface, (0, 255, 0, 128), (min_pos[0], min_pos[1], max_pos[0] - min_pos[0], max_pos[1] - min_pos[1]))
         self.window.blit(temp_surface, temp_surface.get_rect())
+
+    def control_agent(self):
+        """Remap the mouse movement to the control behavior."""
+        ControlAgent = collections.namedtuple("ControlAgent", ["act"])
+
+        def act(obs):
+            act = None
+            mouse_position = pymunk.pygame_util.from_pygame(Vec2d(*pygame.mouse.get_pos()), self.screen)
+            if self.teleop or (mouse_position - self.agent.position).length < 30:
+                self.teleop = True
+                act = mouse_position
+            return act
+
+        return ControlAgent(act)
 
 
 class PushTControlImageEnv(PushTControlEnv):

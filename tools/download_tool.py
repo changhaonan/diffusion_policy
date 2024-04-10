@@ -1,9 +1,8 @@
 import gdown
 import os
 
-if __name__ == "__main__":
-    data_dir = "/common/users/hc856/Project/diffusion_policy/data/"
-    download_key = "kowndi_pusht_demo_v0_follow"
+
+def download_dataset(download_key: str):
     url_dict = {
         "kowndi_pusht_demo_repulse_no_control": "https://drive.google.com/file/d/1cVdygalbELc7DZYGJB1cu7bbYQ2tueRv/view?usp=sharing",
         "kowndi_pusht_demo_v0_repulse": "https://drive.google.com/file/d/1XUG6f9qKxwG8lDJ3r64Y36X4L8Lpz-HJ/view?usp=sharing",
@@ -21,3 +20,10 @@ if __name__ == "__main__":
             os.system(f"tar -xvf {output} -C {data_dir}")
             # Remove the tar file
             os.remove(output)
+
+
+if __name__ == "__main__":
+    data_dir = "/common/users/hc856/Project/diffusion_policy/data/"
+    ## Download the dataset
+    download_key = "kowndi_pusht_demo_v0_follow"
+    download_dataset(download_key)
