@@ -64,7 +64,7 @@ policy:
   - 1024
   - 2048
   eval_fixed_crop: true
-  integrate_type: "controlnet"
+  integrate_type: "concat"
   horizon: 16
   kernel_size: 5
   n_action_steps: 8

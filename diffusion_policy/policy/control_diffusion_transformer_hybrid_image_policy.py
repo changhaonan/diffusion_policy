@@ -167,6 +167,7 @@ class ControlDiffusionTransformerHybridImagePolicy(BaseImagePolicy):
 
         ################################ Control related parameters ################################
         self.integrate_type = integrate_type
+        assert self.obs_as_cond, "Only support obs_as_cond=True"
 
         print("Diffusion params: %e" % sum(p.numel() for p in self.model.parameters()))
         print("Vision params: %e" % sum(p.numel() for p in self.obs_encoder.parameters()))
@@ -244,28 +245,17 @@ class ControlDiffusionTransformerHybridImagePolicy(BaseImagePolicy):
         cond = None
         cond_data = None
         cond_mask = None
-        if self.obs_as_cond:
-            this_nobs = dict_apply(nobs, lambda x: x[:, :To, ...].reshape(-1, *x.shape[2:]))
-            nobs_features = self.obs_encoder(this_nobs)
-            # reshape back to B, To, Do
-            cond = nobs_features.reshape(B, To, -1)
-            shape = (B, T, Da)
-            if self.pred_action_steps_only:
-                shape = (B, self.n_action_steps, Da)
-            cond_data = torch.zeros(size=shape, device=device, dtype=dtype)
-            cond_mask = torch.zeros_like(cond_data, dtype=torch.bool)
-        else:
-            # condition through impainting
-            this_nobs = dict_apply(nobs, lambda x: x[:, :To, ...].reshape(-1, *x.shape[2:]))
-            nobs_features = self.obs_encoder(this_nobs)
-            # reshape back to B, To, Do
-            nobs_features = nobs_features.reshape(B, To, -1)
-            shape = (B, T, Da + Do)
-            cond_data = torch.zeros(size=shape, device=device, dtype=dtype)
-            cond_mask = torch.zeros_like(cond_data, dtype=torch.bool)
-            cond_data[:, :To, Da:] = nobs_features
-            cond_mask[:, :To, Da:] = True
-
+        
+        this_nobs = dict_apply(nobs, lambda x: x[:, :To, ...].reshape(-1, *x.shape[2:]))
+        nobs_features = self.obs_encoder(this_nobs)
+        # reshape back to B, To, Do
+        cond = nobs_features.reshape(B, To, -1)
+        shape = (B, T, Da)
+        if self.pred_action_steps_only:
+            shape = (B, self.n_action_steps, Da)
+        cond_data = torch.zeros(size=shape, device=device, dtype=dtype)
+        cond_mask = torch.zeros_like(cond_data, dtype=torch.bool)
+        
         # run sampling
         nsample = self.conditional_sample(cond_data, cond_mask, cond=cond, **self.kwargs)
 
@@ -306,24 +296,17 @@ class ControlDiffusionTransformerHybridImagePolicy(BaseImagePolicy):
         # handle different ways of passing observation
         cond = None
         trajectory = nactions
-        if self.obs_as_cond:
-            # reshape B, T, ... to B*T
-            this_nobs = dict_apply(nobs, lambda x: x[:, :To, ...].reshape(-1, *x.shape[2:]))
-            nobs_features = self.obs_encoder(this_nobs)
-            # reshape back to B, T, Do
-            cond = nobs_features.reshape(batch_size, To, -1)
-            if self.pred_action_steps_only:
-                start = To - 1
-                end = start + self.n_action_steps
-                trajectory = nactions[:, start:end]
-        else:
-            # reshape B, T, ... to B*T
-            this_nobs = dict_apply(nobs, lambda x: x.reshape(-1, *x.shape[2:]))
-            nobs_features = self.obs_encoder(this_nobs)
-            # reshape back to B, T, Do
-            nobs_features = nobs_features.reshape(batch_size, horizon, -1)
-            trajectory = torch.cat([nactions, nobs_features], dim=-1).detach()
-
+        
+        # reshape B, T, ... to B*T
+        this_nobs = dict_apply(nobs, lambda x: x[:, :To, ...].reshape(-1, *x.shape[2:]))
+        nobs_features = self.obs_encoder(this_nobs)
+        # reshape back to B, T, Do
+        cond = nobs_features.reshape(batch_size, To, -1)
+        if self.pred_action_steps_only:
+            start = To - 1
+            end = start + self.n_action_steps
+            trajectory = nactions[:, start:end]
+        
         # generate impainting mask
         if self.pred_action_steps_only:
             condition_mask = torch.zeros_like(trajectory, dtype=torch.bool)
