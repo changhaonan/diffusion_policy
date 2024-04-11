@@ -2,6 +2,7 @@ from typing import Union, Optional, Tuple
 import logging
 import torch
 import torch.nn as nn
+from diffusion_policy.model.diffusion.conv1d_components import Downsample1d, Upsample1d, Conv1dBlock
 from diffusion_policy.model.diffusion.positional_embedding import SinusoidalPosEmb
 from diffusion_policy.model.common.module_attr_mixin import ModuleAttrMixin
 from timm.models.vision_transformer import PatchEmbed, Mlp
@@ -131,6 +132,7 @@ class DiTModel(ModuleAttrMixin):
         # decoder head
         self.ln_f = nn.LayerNorm(n_emb * T_cond)
         self.head = nn.Linear(n_emb * T_cond, output_dim)
+        self.final_conv = nn.Conv1d(output_dim, output_dim, 1)
 
         self.dit_blocks = nn.ModuleList()
         for i in range(n_layer):
@@ -159,12 +161,13 @@ class DiTModel(ModuleAttrMixin):
 
         x = self.input_emb(sample)
         pos_embedding = self.pos_emb[:, : x.shape[1]]
-        x = x + pos_embedding
-        # (B, T_pred, n_emb)
 
+        # (B, T_pred, n_emb)
         # Do DiT
         cond_embeddings = cond_embeddings.reshape(cond_embeddings.shape[0], -1)  # (B, n_emb * (n_obs_steps + 1))
         for i in range(len(self.dit_blocks)):
+            # Add positional embedding every block
+            x = x + pos_embedding
             # Mask out the padding
             x = self.dit_blocks[i](x, cond_embeddings)
 
@@ -172,6 +175,8 @@ class DiTModel(ModuleAttrMixin):
         x = self.ln_f(x)
         x = self.head(x)
         # (B, T, n_out)
+        if self.final_conv is not None:
+            x = self.final_conv(x)
         return x
 
     def initialize_weights(self):
