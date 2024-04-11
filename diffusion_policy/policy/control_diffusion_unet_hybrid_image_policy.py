@@ -45,6 +45,7 @@ class ControlDiffusionUnetHybridImagePolicy(BaseImagePolicy):
         # parameters passed to step,
         integrate_type="concat",
         only_mid_control=False,
+        cfg_ratio=0.3,
         **kwargs,
     ):
         """Integrate type:
@@ -120,15 +121,15 @@ class ControlDiffusionUnetHybridImagePolicy(BaseImagePolicy):
 
         # create diffusion model
         obs_feature_dim, control_feature_dim = self._compute_obs_control_shape(obs_encoder)
-        if integrate_type == "concat":
-            obs_feature_dim += control_feature_dim
-            control_feature_dim = None
 
         input_dim = action_dim + obs_feature_dim
         global_cond_dim = None
         if obs_as_global_cond:
             input_dim = action_dim
-            global_cond_dim = obs_feature_dim * n_obs_steps
+            if integrate_type == "concat":
+                global_cond_dim = (obs_feature_dim + control_feature_dim) * n_obs_steps
+            else:
+                global_cond_dim = obs_feature_dim * n_obs_steps
 
         model = ControlUnet1D(
             input_dim=input_dim,
@@ -141,6 +142,7 @@ class ControlDiffusionUnetHybridImagePolicy(BaseImagePolicy):
             kernel_size=kernel_size,
             n_groups=n_groups,
             cond_predict_scale=cond_predict_scale,
+            integrate_type=integrate_type,
         )
 
         self.obs_encoder = obs_encoder
@@ -163,6 +165,9 @@ class ControlDiffusionUnetHybridImagePolicy(BaseImagePolicy):
 
         ################################ Control related parameters ################################
         self.integrate_type = integrate_type
+        self.use_cfg = cfg_ratio > 0
+        self.cfg_ratio = cfg_ratio
+        self.mask_prob = 0.1 if self.use_cfg else 0.0
         assert self.obs_as_global_cond, "control diffusion policy requires obs_as_global_cond=True"
 
         print("Diffusion params: %e" % sum(p.numel() for p in self.model.parameters()))
@@ -210,6 +215,10 @@ class ControlDiffusionUnetHybridImagePolicy(BaseImagePolicy):
 
             # 2. predict model output
             model_output = model(trajectory, t, control_cond=control_cond, global_cond=global_cond)
+            if self.use_cfg:
+                uncontrol_cond = torch.zeros_like(control_cond)
+                uncontrol_model_output = model(trajectory, t, control_cond=uncontrol_cond, global_cond=global_cond)
+                model_output = model_output + self.cfg_ratio * (model_output - uncontrol_model_output)
 
             # 3. compute previous image: x_t -> x_t-1
             trajectory = scheduler.step(model_output, t, trajectory, generator=generator, **kwargs).prev_sample
@@ -243,7 +252,6 @@ class ControlDiffusionUnetHybridImagePolicy(BaseImagePolicy):
         # condition through global feature
         this_nobs = dict_apply(nobs, lambda x: x[:, :To, ...].reshape(-1, *x.shape[2:]))
 
-        # nobs_features = self.obs_encoder(this_nobs)
         nobs_features = self.obs_encoder(this_nobs)  # (agent_pos, image, control)
         nobs_features, ncontrol_features = nobs_features[:, :Do], nobs_features[:, Do:]
         # reshape back to B, Do
@@ -287,9 +295,14 @@ class ControlDiffusionUnetHybridImagePolicy(BaseImagePolicy):
 
         # reshape B, T, ... to B*T
         this_nobs = dict_apply(nobs, lambda x: x[:, : self.n_obs_steps, ...].reshape(-1, *x.shape[2:]))
-        # nobs_features = self.obs_encoder(this_nobs)
         nobs_features = self.obs_encoder(this_nobs)  # (agent_pos, image, control)
         nobs_features, ncontrol_features = nobs_features[:, : self.obs_feature_dim], nobs_features[:, self.obs_feature_dim :]
+
+        if self.use_cfg:
+            # randomly mask control signal
+            cfg_mask = torch.rand(batch_size, 1, device=self.device) < self.mask_prob
+            cfg_mask = torch.repeat_interleave(cfg_mask, self.n_obs_steps, dim=1).reshape(-1, 1)
+            ncontrol_features = ncontrol_features * ~cfg_mask
         # reshape back to B, Do
         global_cond = nobs_features.reshape(batch_size, -1)
         control_cond = ncontrol_features.reshape(batch_size, -1)

@@ -48,6 +48,7 @@ class ControlDiffusionTransformerHybridImagePolicy(BaseImagePolicy):
         pred_action_steps_only=False,
         # parameters passed to step
         integrate_type="concat",
+        use_cfg=False,
         **kwargs,
     ):
         """Integrate type:
@@ -168,6 +169,7 @@ class ControlDiffusionTransformerHybridImagePolicy(BaseImagePolicy):
 
         ################################ Control related parameters ################################
         self.integrate_type = integrate_type
+        self.use_cfg = use_cfg
         assert self.obs_as_cond, "Only support obs_as_cond=True"
 
         print("Diffusion params: %e" % sum(p.numel() for p in self.model.parameters()))

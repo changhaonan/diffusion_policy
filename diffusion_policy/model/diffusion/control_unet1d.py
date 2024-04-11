@@ -25,10 +25,12 @@ class ControlUnet1D(ConditionalUnet1D):
         kernel_size=3,
         n_groups=8,
         cond_predict_scale=False,
+        integrate_type="concat",
     ):
         super().__init__(input_dim, local_cond_dim, global_cond_dim, diffusion_step_embed_dim, down_dims, kernel_size, n_groups, cond_predict_scale)
         self.only_mid_control = only_mid_control
-        if control_cond_dim is None:
+        self.integrate_type = integrate_type
+        if control_cond_dim is None or (integrate_type == "concat"):
             # No explicit control
             self.control_modules = nn.ModuleList([])
         else:
@@ -77,6 +79,9 @@ class ControlUnet1D(ConditionalUnet1D):
         timestep_feature = self.diffusion_step_encoder(timesteps)
 
         if global_cond is not None:
+            if control_cond is not None and self.integrate_type == "concat":
+                global_cond = torch.cat([global_cond, control_cond], axis=-1)
+                control_cond = None
             global_feature = torch.cat([timestep_feature, global_cond], axis=-1)
         else:
             global_feature = timestep_feature
