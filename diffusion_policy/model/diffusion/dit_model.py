@@ -176,7 +176,9 @@ class DiTModel(ModuleAttrMixin):
         x = self.head(x)
         # (B, T, n_out)
         if self.final_conv is not None:
+            x = x.transpose(1, 2)
             x = self.final_conv(x)
+            x = x.transpose(1, 2)
         return x
 
     def initialize_weights(self):
