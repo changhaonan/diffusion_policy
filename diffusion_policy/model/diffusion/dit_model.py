@@ -109,7 +109,9 @@ class DiTModel(ModuleAttrMixin):
         n_cond_layers: int = 0,
     ) -> None:
         super().__init__()
-
+        # Parameters
+        self.use_final_conv = True
+        self.long_skip = False
         # compute number of tokens for main trunk and condition encoder
         if n_obs_steps is None:
             n_obs_steps = horizon
@@ -132,11 +134,14 @@ class DiTModel(ModuleAttrMixin):
         # decoder head
         self.ln_f = nn.LayerNorm(n_emb * T_cond)
         self.head = nn.Linear(n_emb * T_cond, output_dim)
-        self.final_conv = nn.Conv1d(output_dim, output_dim, 1)
+        self.final_conv = nn.Conv1d(output_dim, output_dim, 1) if self.use_final_conv else None
 
         self.dit_blocks = nn.ModuleList()
         for i in range(n_layer):
             self.dit_blocks.insert(0, DiTBlock(hidden_size=n_emb * T_cond, num_heads=n_head, attn_drop=p_drop_attn, proj_drop=p_drop_attn))
+        self.long_skip_proj = nn.ModuleList()
+        for i in range(n_layer // 2):
+            self.long_skip_proj.append(nn.Linear(2 * n_emb * T_cond, n_emb * T_cond))
         # init
         self.initialize_weights()
 
@@ -163,14 +168,20 @@ class DiTModel(ModuleAttrMixin):
         pos_embedding = self.pos_emb[:, : x.shape[1]]
 
         # (B, T_pred, n_emb)
+        h = []
         # Do DiT
         cond_embeddings = cond_embeddings.reshape(cond_embeddings.shape[0], -1)  # (B, n_emb * (n_obs_steps + 1))
+        x = x + pos_embedding  # Add positional embedding
         for i in range(len(self.dit_blocks)):
-            # Add positional embedding every block
-            x = x + pos_embedding
             # Mask out the padding
             x = self.dit_blocks[i](x, cond_embeddings)
-
+            if self.long_skip:
+                if i < (len(self.dit_blocks) // 2):
+                    h.append(x)
+                elif i >= (len(self.dit_blocks) // 2) and h:
+                    # Long skip connection as in UViT
+                    x = torch.cat([x, h.pop()], dim=1)
+                    x = self.long_skip_proj[i - len(self.dit_blocks) // 2](x)
         # head
         x = self.ln_f(x)
         x = self.head(x)
