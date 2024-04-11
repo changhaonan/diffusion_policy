@@ -120,8 +120,8 @@ class DiTModel(ModuleAttrMixin):
         T_cond += n_obs_steps
 
         # input embedding stem
-        self.input_emb = nn.Linear(input_dim, n_emb)
-        self.pos_emb = nn.Parameter(torch.zeros(1, T, n_emb))
+        self.input_emb = nn.Linear(input_dim, n_emb * T_cond)
+        self.pos_emb = nn.Parameter(torch.zeros(1, T, n_emb * T_cond))
         self.drop = nn.Dropout(p_drop_emb)
 
         # cond encoder
@@ -129,12 +129,12 @@ class DiTModel(ModuleAttrMixin):
         self.cond_obs_emb = nn.Linear(cond_dim, n_emb)
 
         # decoder head
-        self.ln_f = nn.LayerNorm(n_emb)
-        self.head = nn.Linear(n_emb, output_dim)
+        self.ln_f = nn.LayerNorm(n_emb * T_cond)
+        self.head = nn.Linear(n_emb * T_cond, output_dim)
 
-        self.dit_blocks = []
+        self.dit_blocks = nn.ModuleList()
         for i in range(n_layer):
-            self.dit_blocks.insert(0, DiTBlock(hidden_size=n_emb, num_heads=n_head, attn_drop=p_drop_attn, proj_drop=p_drop_attn))
+            self.dit_blocks.insert(0, DiTBlock(hidden_size=n_emb * T_cond, num_heads=n_head, attn_drop=p_drop_attn, proj_drop=p_drop_attn))
         # init
         self.initialize_weights()
 
@@ -155,14 +155,18 @@ class DiTModel(ModuleAttrMixin):
         cond_embeddings = time_emb
         cond_obs_emb = self.cond_obs_emb(cond)
         cond_embeddings = torch.cat([cond_embeddings, cond_obs_emb], dim=1)
+        # (B, n_obs_steps, n_emb)
 
-        noisy_t = self.input_emb
-        pos_embedding = self.pos_emb[:, : noisy_t.shape[1]]
-        noisy_t = noisy_t + pos_embedding
+        x = self.input_emb(sample)
+        pos_embedding = self.pos_emb[:, : x.shape[1]]
+        x = x + pos_embedding
+        # (B, T_pred, n_emb)
+
         # Do DiT
+        cond_embeddings = cond_embeddings.reshape(cond_embeddings.shape[0], -1)  # (B, n_emb * (n_obs_steps + 1))
         for i in range(len(self.dit_blocks)):
             # Mask out the padding
-            noisy_t = self.dit_blocks[i](noisy_t, cond_embeddings)
+            x = self.dit_blocks[i](x, cond_embeddings)
 
         # head
         x = self.ln_f(x)
@@ -176,5 +180,5 @@ class DiTModel(ModuleAttrMixin):
             nn.init.constant_(block.adaLN_modulation[-1].weight, 0)
             nn.init.constant_(block.adaLN_modulation[-1].bias, 0)
 
-    def get_optim_groups(self):
+    def get_optim_groups(self, weight_decay: float = 0.0):
         return [{"params": self.parameters()}]
