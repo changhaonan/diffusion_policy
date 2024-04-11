@@ -111,7 +111,7 @@ class DiTModel(ModuleAttrMixin):
         super().__init__()
         # Parameters
         self.use_final_conv = True
-        self.long_skip = False
+        self.long_skip = True
         # compute number of tokens for main trunk and condition encoder
         if n_obs_steps is None:
             n_obs_steps = horizon
@@ -178,9 +178,9 @@ class DiTModel(ModuleAttrMixin):
             if self.long_skip:
                 if i < (len(self.dit_blocks) // 2):
                     h.append(x)
-                elif i >= (len(self.dit_blocks) // 2) and h:
+                elif i >= (len(self.dit_blocks) // 2) and h and i != len(self.dit_blocks) - 1:
                     # Long skip connection as in UViT
-                    x = torch.cat([x, h.pop()], dim=1)
+                    x = torch.cat([x, h.pop()], dim=-1)
                     x = self.long_skip_proj[i - len(self.dit_blocks) // 2](x)
         # head
         x = self.ln_f(x)
