@@ -111,7 +111,7 @@ task:
   dataset:
     _target_: diffusion_policy.dataset.pusht_image_control_dataset.PushTControlDataset
     horizon: 16
-    max_train_episodes: 90
+    max_train_episodes: 1000
     pad_after: 7
     pad_before: 1
     seed: 42

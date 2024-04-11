@@ -36,9 +36,14 @@ def visualize_dataset(root, wait_time=18):
 
 
 if __name__ == "__main__":
-    root_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
-    # src_data = "kowndi_pusht_demo_repulse_no_control.zarr"
-    src_data = "kowndi_pusht_demo_repulse.zarr"
-    # src_data = "kowndi_pusht_demo_v0_region.zarr"
-    root = read_from_path(os.path.join(root_dir, src_data))
+    server_type = "ilab"
+    netid = "hc856"
+    control_type = "repulse"
+    if server_type == "local":
+        data_src = "./data"
+    elif server_type == "ilab":
+        data_src = f"/common/users/{netid}/Project/diffusion_policy/data"
+
+    src_data = f"{data_src}/kowndi_pusht_demo_v0_{control_type}.zarr"
+    root = read_from_path(src_data)
     visualize_dataset(root)
