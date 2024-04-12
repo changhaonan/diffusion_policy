@@ -98,7 +98,7 @@ def control2ratio_control(root, export_path, ratio=0.5):
 
 
 if __name__ == "__main__":
-    server_type = "ilab"
+    server_type = "local" if not os.path.exists("/common/users") else "ilab"
     netid = "hc856"
     control_type = "repulse"
     if server_type == "local":
@@ -106,7 +106,7 @@ if __name__ == "__main__":
     elif server_type == "ilab":
         data_src = f"/common/users/{netid}/Project/diffusion_policy/data"
 
-    ratio = 0.7
+    ratio = 0.3
     src_data = f"kowndi_pusht_demo_v0_{control_type}.zarr"
     tar_data = f"kowndi_pusht_demo_v0_{control_type}_rc_{ratio}.zarr"
     tar_data = os.path.join(data_src, tar_data)
