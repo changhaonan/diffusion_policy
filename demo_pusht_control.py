@@ -71,7 +71,7 @@ def main(output, control, demo_violate, render_size, control_hz):
             sampled_episode = replay_buffer.get_episode(random_episode)
             episode_len = sampled_episode["img"].shape[0]
             # sample a state
-            state_idx = np.random.randint(0, episode_len)
+            state_idx = np.random.randint(0, int(0.7 * episode_len))  # sample from the first 70% of the episode
             state = sampled_episode["state"][state_idx]
             # reset env to the sampled state
             obs = env.reset_from_state(state)
@@ -143,7 +143,7 @@ def main(output, control, demo_violate, render_size, control_hz):
             # step env and render
             obs, reward, done, info = env.step(act)
             violate = env.violate[-1] if env.violate else 0
-            
+
             if demo_violate and violate:
                 if len(episode) > 0:
                     done = True
