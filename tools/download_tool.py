@@ -28,7 +28,7 @@ if __name__ == "__main__":
 
     server_type = "local" if not os.path.exists("/common/users") else "ilab"
     netid = "hc856"
-    control_type = "repulse"
+    control_type = "region"
     if server_type == "local":
         data_src = "./data"
     elif server_type == "ilab":

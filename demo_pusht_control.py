@@ -12,7 +12,7 @@ import pygame
 
 @click.command()
 @click.option("-o", "--output", default="data/kowndi_pusht_demo_v1.zarr", type=str)
-@click.option("-c", "--control", default="repulse", help="region, repulse, follow")
+@click.option("-c", "--control", default="region", help="region, repulse, follow")
 @click.option("-dv", "--demo_violate", default=True, help="Record violating demonstrations.")
 @click.option("-rs", "--render_size", default=96, type=int)
 @click.option("-hz", "--control_hz", default=10, type=int)

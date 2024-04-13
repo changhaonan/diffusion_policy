@@ -78,6 +78,11 @@ class PushTControlEnv(PushTEnv):
             eps = int(self.control_params["follow"]["eps"] * self.window_size)
             if dist_x > eps and dist_y > eps:
                 return 1.0
+        elif self.control_type == "region" and self.controls is not None:
+            min_pos = self.controls[0]
+            max_pos = self.controls[1]
+            if np.any(agent_pos < min_pos) or np.any(agent_pos > max_pos):
+                return 1.0
         return 0.0
 
     def set_control(self, flag):
