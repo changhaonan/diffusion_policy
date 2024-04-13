@@ -162,6 +162,7 @@ def main(output, control, demo_violate, render_size, control_hz):
             print(f"saved seed {seed}")
         else:
             print(f"retry seed {seed}")
+        print(f"current n_episodes: {replay_buffer.n_episodes}")
 
 
 if __name__ == "__main__":
