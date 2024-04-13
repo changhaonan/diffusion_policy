@@ -172,7 +172,7 @@ class ControlDiffusionUnetHybridImagePolicy(BaseImagePolicy):
         self.cfg_ratio = cfg_ratio
         self.mask_prob = 0.1 if self.use_cfg else 0.0
         assert self.obs_as_global_cond, "control diffusion policy requires obs_as_global_cond=True"
-
+        assert self.use_cfg ^ (control_model == "control_gate_unet"), "control_gate_unet requires cfg_ratio=0"
         print("Diffusion params: %e" % sum(p.numel() for p in self.model.parameters()))
         print("Vision params: %e" % sum(p.numel() for p in self.obs_encoder.parameters()))
 
