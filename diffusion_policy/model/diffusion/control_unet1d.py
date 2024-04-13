@@ -26,7 +26,10 @@ class ControlUnet1D(ConditionalUnet1D):
         n_groups=8,
         cond_predict_scale=False,
         integrate_type="concat",
+        **kwargs,
     ):
+        if integrate_type == "concat":
+            global_cond_dim = control_cond_dim + global_cond_dim
         super().__init__(input_dim, local_cond_dim, global_cond_dim, diffusion_step_embed_dim, down_dims, kernel_size, n_groups, cond_predict_scale)
         self.only_mid_control = only_mid_control
         self.integrate_type = integrate_type
