@@ -14,7 +14,7 @@ from diffusion_policy.dataset.pusht_image_dataset import PushTImageDataset
 class PushTControlDataset(PushTImageDataset):
     def __init__(self, zarr_path, horizon=1, pad_before=0, pad_after=0, seed=42, val_ratio=0.0, max_train_episodes=None):
         super().__init__(zarr_path=zarr_path, horizon=horizon, pad_before=pad_before, pad_after=pad_after, seed=seed, val_ratio=val_ratio, max_train_episodes=max_train_episodes)
-        self.replay_buffer = ReplayBuffer.copy_from_path(zarr_path, keys=["img", "state", "action", "control"])
+        self.replay_buffer = ReplayBuffer.copy_from_path(zarr_path, keys=["img", "state", "action", "control", "demo_type"])
         val_mask = get_val_mask(n_episodes=self.replay_buffer.n_episodes, val_ratio=val_ratio, seed=seed)
         train_mask = ~val_mask
         train_mask = downsample_mask(mask=train_mask, max_n=max_train_episodes, seed=seed)
@@ -26,6 +26,9 @@ class PushTControlDataset(PushTImageDataset):
         # Add control to the data
         control = np.moveaxis(sample["control"], -1, 1) / 255
         data["obs"]["control"] = control
+        # Add demo_type
+        demo_type = sample["demo_type"]
+        data["demo_type"] = demo_type
         torch_data = dict_apply(data, torch.from_numpy)
         return torch_data
 
@@ -40,7 +43,7 @@ if __name__ == "__main__":
     import cv2
 
     root_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    zarr_path = os.path.join(root_path, "data/kowndi_pusht_demo_repulse.zarr")
+    zarr_path = os.path.join(root_path, "data/kowndi_pusht_demo_v1_repulse.zarr")
     dataset = PushTControlDataset(zarr_path=zarr_path, horizon=1, pad_before=0, pad_after=0, seed=42, val_ratio=0.0, max_train_episodes=None)
     for i in range(len(dataset)):
         print(f"Processing {i}/{len(dataset)}")

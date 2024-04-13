@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Union
 import math
 import numpy as np
 import torch
@@ -10,6 +10,7 @@ from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
 from diffusion_policy.model.common.normalizer import LinearNormalizer
 from diffusion_policy.policy.base_image_policy import BaseImagePolicy
 from diffusion_policy.model.diffusion.conditional_unet1d import ConditionalUnet1D
+from diffusion_policy.model.diffusion.control_gate_unet1d import ControlGateUnet1D
 from diffusion_policy.model.diffusion.control_unet1d import ControlUnet1D
 from diffusion_policy.model.diffusion.mask_generator import LowdimMaskGenerator
 from diffusion_policy.common.robomimic_config_util import get_robomimic_config
@@ -43,6 +44,7 @@ class ControlDiffusionUnetHybridImagePolicy(BaseImagePolicy):
         obs_encoder_group_norm=False,
         eval_fixed_crop=False,
         # parameters passed to step,
+        control_model="control_gate_unet",
         integrate_type="concat",
         only_mid_control=False,
         cfg_ratio=0.3,
@@ -123,19 +125,20 @@ class ControlDiffusionUnetHybridImagePolicy(BaseImagePolicy):
         obs_feature_dim, control_feature_dim = self._compute_obs_control_shape(obs_encoder)
 
         input_dim = action_dim + obs_feature_dim
-        global_cond_dim = None
-        if obs_as_global_cond:
-            input_dim = action_dim
-            if integrate_type == "concat":
-                global_cond_dim = (obs_feature_dim + control_feature_dim) * n_obs_steps
-            else:
-                global_cond_dim = obs_feature_dim * n_obs_steps
+        input_dim = action_dim
+        global_cond_dim = obs_feature_dim * n_obs_steps
+        control_cond_dim = control_feature_dim * n_obs_steps if control_feature_dim is not None else None
 
-        model = ControlUnet1D(
+        if control_model == "control_gate_unet":
+            model_fn = ControlGateUnet1D
+        elif control_model == "control_unet":
+            model_fn = ControlUnet1D
+        else:
+            raise ValueError(f"Unsupported control model: {control_model}")
+        model = model_fn(
             input_dim=input_dim,
-            control_cond_dim=control_feature_dim * n_obs_steps if control_feature_dim is not None else None,
+            control_cond_dim=control_cond_dim,
             only_mid_control=only_mid_control,
-            local_cond_dim=None,
             global_cond_dim=global_cond_dim,
             diffusion_step_embed_dim=diffusion_step_embed_dim,
             down_dims=down_dims,
@@ -195,10 +198,11 @@ class ControlDiffusionUnetHybridImagePolicy(BaseImagePolicy):
         self,
         condition_data,
         condition_mask,
+        gate=1,
         control_cond=None,
         global_cond=None,
         generator=None,
-        # keyword arguments to scheduler.step
+        # keyword arguments to scheduler.step\
         **kwargs,
     ):
         model = self.model
@@ -214,10 +218,10 @@ class ControlDiffusionUnetHybridImagePolicy(BaseImagePolicy):
             trajectory[condition_mask] = condition_data[condition_mask]
 
             # 2. predict model output
-            model_output = model(trajectory, t, control_cond=control_cond, global_cond=global_cond)
+            model_output = model(trajectory, t, gate=gate, control_cond=control_cond, global_cond=global_cond)
             if self.use_cfg:
                 uncontrol_cond = torch.zeros_like(control_cond)
-                uncontrol_model_output = model(trajectory, t, control_cond=uncontrol_cond, global_cond=global_cond)
+                uncontrol_model_output = model(trajectory, t, gate=gate, control_cond=uncontrol_cond, global_cond=global_cond)
                 model_output = model_output + self.cfg_ratio * (model_output - uncontrol_model_output)
 
             # 3. compute previous image: x_t -> x_t-1
@@ -228,7 +232,7 @@ class ControlDiffusionUnetHybridImagePolicy(BaseImagePolicy):
 
         return trajectory
 
-    def predict_action(self, obs_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def predict_action(self, obs_dict: Dict[str, torch.Tensor], gate: Union[int, torch.Tensor] = 1) -> Dict[str, torch.Tensor]:
         """
         obs_dict: must include "obs" key
         result: must include "action" key
@@ -262,7 +266,7 @@ class ControlDiffusionUnetHybridImagePolicy(BaseImagePolicy):
         cond_mask = torch.zeros_like(cond_data, dtype=torch.bool)
 
         # run sampling
-        nsample = self.conditional_sample(cond_data, cond_mask, control_cond=control_cond, global_cond=global_cond, **self.kwargs)
+        nsample = self.conditional_sample(cond_data, cond_mask, gate=gate, control_cond=control_cond, global_cond=global_cond, **self.kwargs)
 
         # unnormalize prediction
         naction_pred = nsample[..., :Da]
@@ -307,6 +311,7 @@ class ControlDiffusionUnetHybridImagePolicy(BaseImagePolicy):
         global_cond = nobs_features.reshape(batch_size, -1)
         control_cond = ncontrol_features.reshape(batch_size, -1)
 
+        demo_type = batch["demo_type"][:, 0, 0]  # (B,)
         # generate impainting mask
         condition_mask = self.mask_generator(trajectory.shape)
 
@@ -326,7 +331,7 @@ class ControlDiffusionUnetHybridImagePolicy(BaseImagePolicy):
         noisy_trajectory[condition_mask] = cond_data[condition_mask]
 
         # Predict the noise residual
-        pred = self.model(noisy_trajectory, timesteps, control_cond=control_cond, global_cond=global_cond)
+        pred = self.model(noisy_trajectory, timesteps, control_cond=control_cond, global_cond=global_cond, gate=demo_type)
 
         pred_type = self.noise_scheduler.config.prediction_type
         if pred_type == "epsilon":
