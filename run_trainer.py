@@ -6,11 +6,13 @@ import os
 @click.option("--arch", "-a", default="cnn", type=str, help="cnn or transformer")
 @click.option("--netid", "-n", default="hc856", type=str)
 @click.option("--data_src", "-d", default="", type=str)
-@click.option("--control_type", "-ct", default="repulse", type=str, help="repulse, region, follow")
-@click.option("--integrate_type", "-it", default="concat", type=str, help="concat or controlnet")
+@click.option("--data_version", "-v", default=1, type=int)
+@click.option("--control_type", "-t", default="repulse", type=str, help="repulse, region, follow")
+@click.option("--control_model", "-m", default="control_gate_unet", type=str, help="control_gate_unet, control_unet")
+@click.option("--integrate_type", "-i", default="concat", type=str, help="concat or controlnet")
 @click.option("--cuda_id", "-c", default=0, type=int)
-@click.option("--data_extra", "-ex", default="rc_0.3", type=str)
-def main(arch, netid, data_src, control_type, integrate_type, cuda_id, data_extra):
+@click.option("--data_extra", "-ex", default="", type=str)
+def main(arch, netid, data_src, data_version, control_type, control_model, integrate_type, cuda_id, data_extra):
     cfg_ratio = 0.0
     server_type = "local" if not os.path.exists("/common/users") else "ilab"
     if server_type == "local":
@@ -21,15 +23,18 @@ def main(arch, netid, data_src, control_type, integrate_type, cuda_id, data_extr
         data_src = data_src
 
     command = f"python train.py --config-dir=. --config-name=image_pusht_control_diffusion_policy_{arch}.yaml"
+    command += f" policy.control_model='{control_model}'"
     command += f" policy.integrate_type='{integrate_type}'"
     command += f" policy.cfg_ratio={cfg_ratio}"
     command += " training.seed=42"
     command += f" training.device=cuda:{cuda_id}"
     command += f" hydra.run.dir='{data_src}/outputs/${{now:%Y.%m.%d}}/${{now:%H.%M.%S}}_${{name}}_${{task_name}}'"
-    # command += f" task.dataset.zarr_path={data_src}/kowndi_pusht_demo_v0_{control_type}.zarr"
-    command += f" task.dataset.zarr_path={data_src}/kowndi_pusht_demo_v0_{control_type}_{data_extra}.zarr"
+    if data_extra:
+        command += f" task.dataset.zarr_path={data_src}/kowndi_pusht_demo_v{data_version}_{control_type}_{data_extra}.zarr"
+    else:
+        command += f" task.dataset.zarr_path={data_src}/kowndi_pusht_demo_v{data_version}_{control_type}.zarr"
     command += f" task.env_runner.control_type={control_type}"
-    command += f" logging.name=train_diffusion_{arch}_{control_type}_{integrate_type}_{data_extra}"
+    command += f" logging.name=train_diffusion_{arch}_{control_type}_{integrate_type}_{data_extra}_{control_model}"
     print(command)
     os.system(command)
 
