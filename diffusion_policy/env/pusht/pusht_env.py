@@ -87,6 +87,17 @@ class PushTEnv(gym.Env):
         observation = self._get_obs()
         return observation
 
+    def reset_from_state(self, state):
+        self._setup()
+        if self.block_cog is not None:
+            self.block.center_of_gravity = self.block_cog
+        if self.damping is not None:
+            self.space.damping = self.damping
+
+        self._set_state(state)
+        observation = self._get_obs()
+        return observation
+
     def step(self, action):
         dt = 1.0 / self.sim_hz
         self.n_contact_points = 0
@@ -193,7 +204,7 @@ class PushTEnv(gym.Env):
         img = cv2.resize(img, (self.render_size, self.render_size))
 
         if mode == "human":
-            
+
             # The following line copies our drawings from `canvas` to the visible window
             self.window.blit(canvas, canvas.get_rect())
             # Draw control signal

@@ -64,7 +64,8 @@ class PushTControlEnv(PushTEnv):
         if self.control_type == "repulse" and self.controls is not None:
             for point in self.controls:
                 dist = np.linalg.norm(agent_pos - point)
-                if dist < self.control_params["repulse"]["radius"]:
+                if dist < (self.control_params["repulse"]["radius"] + 15):
+                    # 15 is the radius of the agent
                     return 1.0
         elif self.control_type == "follow" and self.controls is not None:
             # Compute the distance to the grid
@@ -84,6 +85,15 @@ class PushTControlEnv(PushTEnv):
 
     def reset(self):
         obs = super().reset()
+        self.controls = None
+        self.control_random_vals = None
+        self.control_counter = 0
+        self.violate = list()
+        self._init_control()
+        return obs
+
+    def reset_from_state(self, state):
+        obs = super().reset_from_state(state)
         self.controls = None
         self.control_random_vals = None
         self.control_counter = 0

@@ -19,6 +19,8 @@ def convert(root, export_path, convertion_str, **kwargs):
         return control2no_control(root, export_path, **kwargs)
     elif convertion_str == "control2ratio_control":
         return control2ratio_control(root, export_path, **kwargs)
+    elif convertion_str == "convert_v0_to_v1":
+        return convert_v0_to_v1(root, export_path, **kwargs)
     else:
         raise ValueError(f"Unknown convertion_str: {convertion_str}")
 
@@ -97,6 +99,44 @@ def control2ratio_control(root, export_path, ratio=0.5):
     return export_root
 
 
+def convert_v0_to_v1(root, export_path):
+    """V0 data doesn't have demo_type."""
+    data = root["data"]
+    meta = root["meta"]
+    episode_ends = np.array(meta["episode_ends"])
+    data_new = {}
+    episode_ends_new = [0]
+    for key, value in data.items():
+        data_new[key] = []
+    data_new["demo_type"] = []
+
+    # Create export zarr file
+    export_root = zarr.open(export_path, "w")
+    export_data = export_root.create_group("data")
+    export_meta = export_root.create_group("meta")
+
+    # Traverse the data
+    for i in tqdm(range(len(episode_ends) - 1)):
+        start, end = episode_ends[i], episode_ends[i + 1]
+        control = data["control"][start:end]
+        if np.sum(control) == 0:
+            # No control data
+            demo_type = np.zeros([end - start, 1], dtype=np.int32)
+        else:
+            # Control data
+            demo_type = np.ones([end - start, 1], dtype=np.int32)
+        # No control data
+        for key, value in data.items():
+            data_new[key].append(value[start:end])
+        data_new["demo_type"].append(demo_type)
+        episode_ends_new.append(episode_ends_new[-1] + end - start)
+    # Save the data
+    for key, value in data_new.items():
+        export_data.create_dataset(key, data=np.concatenate(value, axis=0))
+    export_meta.create_dataset("episode_ends", data=episode_ends_new)
+    return export_root
+
+
 if __name__ == "__main__":
     server_type = "local" if not os.path.exists("/common/users") else "ilab"
     netid = "hc856"
@@ -108,10 +148,11 @@ if __name__ == "__main__":
 
     ratio = 0.3
     src_data = f"kowndi_pusht_demo_v0_{control_type}.zarr"
-    tar_data = f"kowndi_pusht_demo_v0_{control_type}_rc_{ratio}.zarr"
+    tar_data = f"kowndi_pusht_demo_v1_{control_type}.zarr"
     tar_data = os.path.join(data_src, tar_data)
     # convertion_str = "control2no_control"
-    convertion_str = "control2ratio_control"
+    # convertion_str = "control2ratio_control"
+    convertion_str = "convert_v0_to_v1"
 
     root = read_from_path(os.path.join(data_src, src_data))
-    convert_root = convert(root, tar_data, convertion_str, ratio=ratio)
+    convert_root = convert(root, tar_data, convertion_str)
