@@ -70,6 +70,9 @@ def main(output, control, demo_violate, render_size, control_hz):
             env.seed(seed)
             sampled_episode = replay_buffer.get_episode(random_episode)
             episode_len = sampled_episode["img"].shape[0]
+            if episode_len < 10 or sampled_episode["demo_type"][0].item() == 2:
+                # skip if the episode is too short or already violating
+                continue
             # sample a state
             state_idx = np.random.randint(0, int(0.7 * episode_len))  # sample from the first 70% of the episode
             state = sampled_episode["state"][state_idx]
