@@ -166,7 +166,7 @@ class ControlGateUnet1D(nn.Module):
         global_feature_gate = torch.cat([gate_feature, global_feature], axis=-1)
         if not self.control_in_decoder and self.integrate_type == "concat":
             # Exclude control signal from decoder
-            global_feature_gate = global_feature_gate[:, :, : -self.control_cond_dim]
+            global_feature_gate = global_feature_gate[:, : -self.control_cond_dim]
             
         for mid_module in self.mid_modules:
             x = mid_module(x, global_feature_gate)
