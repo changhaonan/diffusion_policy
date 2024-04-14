@@ -29,7 +29,9 @@ class ControlGateUnet1D(nn.Module):
         kernel_size=3,
         n_groups=8,
         cond_predict_scale=False,
+        # control related
         integrate_type="concat",
+        control_in_decoder=False,
         **kwargs,
     ):
         super().__init__()
@@ -72,6 +74,9 @@ class ControlGateUnet1D(nn.Module):
             )
 
         # Decoders
+        if not control_in_decoder:
+            cond_dim -= control_cond_dim
+
         mid_dim = all_dims[-1]
         self.mid_modules = nn.ModuleList(
             [
@@ -105,6 +110,7 @@ class ControlGateUnet1D(nn.Module):
         self.final_conv = final_conv
         self.integrate_type = integrate_type
         self.control_cond_dim = control_cond_dim
+        self.control_in_decoder = control_in_decoder
         logger.info("number of parameters: %e", sum(p.numel() for p in self.parameters()))
 
     def forward(self, sample: torch.Tensor, timestep: Union[torch.Tensor, float, int], gate=Union[torch.Tensor, int], control_cond=None, global_cond=None, **kwargs):
@@ -116,6 +122,7 @@ class ControlGateUnet1D(nn.Module):
         output: (B, T, input_dim)
         gate: (B,)
         """
+        assert control_cond is not None or self.control_cond_dim is None, "control_cond is required"
         sample = einops.rearrange(sample, "b h t -> b t h")
 
         # time
@@ -143,9 +150,8 @@ class ControlGateUnet1D(nn.Module):
 
         if global_cond is not None:
             global_feature = torch.cat([global_feature, global_cond], axis=-1)
-            if control_cond is not None and self.integrate_type == "concat":
+            if self.integrate_type == "concat":
                 global_feature = torch.cat([global_feature, control_cond], axis=-1)
-                control_cond = None
 
         x = sample
         h = []
@@ -158,6 +164,10 @@ class ControlGateUnet1D(nn.Module):
 
         # Decoding; Add gate
         global_feature_gate = torch.cat([gate_feature, global_feature], axis=-1)
+        if not self.control_in_decoder and self.integrate_type == "concat":
+            # Exclude control signal from decoder
+            global_feature_gate = global_feature_gate[:, :, : -self.control_cond_dim]
+            
         for mid_module in self.mid_modules:
             x = mid_module(x, global_feature_gate)
 
