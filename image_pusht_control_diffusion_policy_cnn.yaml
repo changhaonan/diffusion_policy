@@ -66,7 +66,8 @@ policy:
   eval_fixed_crop: true
   control_model: "control_gate_unet"
   integrate_type: "concat"
-  cfg_ratio: 0.0  # classifier-free-guidance
+  control_in_decoder: false
+  cfg_ratio: -0.3  # classifier-free-guidance
   horizon: 16
   kernel_size: 5
   n_action_steps: 8

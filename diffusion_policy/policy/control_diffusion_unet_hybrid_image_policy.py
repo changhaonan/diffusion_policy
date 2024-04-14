@@ -46,8 +46,8 @@ class ControlDiffusionUnetHybridImagePolicy(BaseImagePolicy):
         # parameters passed to step,
         control_model="control_gate_unet",
         integrate_type="concat",
-        only_mid_control=False,
         cfg_ratio=0.3,
+        control_in_decoder=False,
         **kwargs,
     ):
         """Integrate type:
@@ -138,7 +138,6 @@ class ControlDiffusionUnetHybridImagePolicy(BaseImagePolicy):
         model = model_fn(
             input_dim=input_dim,
             control_cond_dim=control_cond_dim,
-            only_mid_control=only_mid_control,
             global_cond_dim=global_cond_dim,
             diffusion_step_embed_dim=diffusion_step_embed_dim,
             down_dims=down_dims,
@@ -146,6 +145,7 @@ class ControlDiffusionUnetHybridImagePolicy(BaseImagePolicy):
             n_groups=n_groups,
             cond_predict_scale=cond_predict_scale,
             integrate_type=integrate_type,
+            control_in_decoder=control_in_decoder,
         )
 
         self.obs_encoder = obs_encoder
@@ -168,12 +168,8 @@ class ControlDiffusionUnetHybridImagePolicy(BaseImagePolicy):
 
         ################################ Control related parameters ################################
         self.integrate_type = integrate_type
-        self.use_cfg = cfg_ratio > 0
         self.cfg_ratio = cfg_ratio
-        self.mask_prob = 0.1 if self.use_cfg else 0.0
         assert self.obs_as_global_cond, "control diffusion policy requires obs_as_global_cond=True"
-        if self.use_cfg:
-            assert not (control_model == "control_gate_unet"), "control_gate_unet requires cfg_ratio=0"
         print("Diffusion params: %e" % sum(p.numel() for p in self.model.parameters()))
         print("Vision params: %e" % sum(p.numel() for p in self.obs_encoder.parameters()))
 
@@ -220,10 +216,11 @@ class ControlDiffusionUnetHybridImagePolicy(BaseImagePolicy):
 
             # 2. predict model output
             model_output = model(trajectory, t, gate=gate, control_cond=control_cond, global_cond=global_cond)
-            if self.use_cfg:
-                uncontrol_cond = torch.zeros_like(control_cond)
-                uncontrol_model_output = model(trajectory, t, gate=gate, control_cond=uncontrol_cond, global_cond=global_cond)
-                model_output = model_output + self.cfg_ratio * (model_output - uncontrol_model_output)
+            if self.cfg_ratio < 0:
+                # Negative guidance
+                negative_gate = 2  # 2 is the negative gate
+                neg_model_output = model(trajectory, t, gate=negative_gate, control_cond=control_cond, global_cond=global_cond)
+                model_output = model_output + self.cfg_ratio * (neg_model_output - model_output)  # away from negative guidance
 
             # 3. compute previous image: x_t -> x_t-1
             trajectory = scheduler.step(model_output, t, trajectory, generator=generator, **kwargs).prev_sample
@@ -303,11 +300,6 @@ class ControlDiffusionUnetHybridImagePolicy(BaseImagePolicy):
         nobs_features = self.obs_encoder(this_nobs)  # (agent_pos, image, control)
         nobs_features, ncontrol_features = nobs_features[:, : self.obs_feature_dim], nobs_features[:, self.obs_feature_dim :]
 
-        if self.use_cfg:
-            # randomly mask control signal
-            cfg_mask = torch.rand(batch_size, 1, device=self.device) < self.mask_prob
-            cfg_mask = torch.repeat_interleave(cfg_mask, self.n_obs_steps, dim=1).reshape(-1, 1)
-            ncontrol_features = ncontrol_features * ~cfg_mask
         # reshape back to B, Do
         global_cond = nobs_features.reshape(batch_size, -1)
         control_cond = ncontrol_features.reshape(batch_size, -1)

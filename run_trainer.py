@@ -10,10 +10,10 @@ import os
 @click.option("--control_type", "-t", default="repulse", type=str, help="repulse, region, follow")
 @click.option("--control_model", "-m", default="control_gate_unet", type=str, help="control_gate_unet, control_unet")
 @click.option("--integrate_type", "-i", default="concat", type=str, help="concat or controlnet")
+@click.option("--cfg_ratio", "-r", default=0.0, type=float)
 @click.option("--cuda_id", "-c", default=0, type=int)
 @click.option("--data_extra", "-ex", default="", type=str)
-def main(arch, netid, data_src, data_version, control_type, control_model, integrate_type, cuda_id, data_extra):
-    cfg_ratio = 0.0
+def main(arch, netid, data_src, data_version, control_type, control_model, integrate_type, cfg_ratio, cuda_id, data_extra):
     server_type = "local" if not os.path.exists("/common/users") else "ilab"
     if server_type == "local":
         data_src = "./data"
@@ -34,7 +34,7 @@ def main(arch, netid, data_src, data_version, control_type, control_model, integ
     else:
         command += f" task.dataset.zarr_path={data_src}/kowndi_pusht_demo_v{data_version}_{control_type}.zarr"
     command += f" task.env_runner.control_type={control_type}"
-    command += f" logging.name=train_diffusion_{arch}_{control_type}_{integrate_type}_{data_extra}_{control_model}"
+    command += f" logging.name=train_diffusion_{arch}_{control_type}_{integrate_type}_{data_extra}_{control_model}_{cfg_ratio}"
     print(command)
     os.system(command)
 
