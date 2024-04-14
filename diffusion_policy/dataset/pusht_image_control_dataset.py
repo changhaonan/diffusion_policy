@@ -55,6 +55,11 @@ class PushTControlDataset(PushTImageDataset):
         torch_data = dict_apply(data, torch.from_numpy)
         return torch_data
 
+    def get_validation_dataset(self):
+        val_set = super().get_validation_dataset()
+        val_set._classify_by_demo_type()
+        return val_set
+
     def get_normalizer(self, mode="limits", **kwargs):
         normalizer = super().get_normalizer(mode, **kwargs)
         normalizer["control"] = get_image_range_normalizer()
