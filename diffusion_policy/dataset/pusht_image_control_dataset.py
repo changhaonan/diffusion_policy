@@ -76,8 +76,8 @@ if __name__ == "__main__":
         print(f"demo_type: {demo_type}")
         if np.max(control) > 0:
             control_image = (control * 255).astype(np.uint8)
-            cv2.imshow("control", control_image)
-            cv2.waitKey(0)
-            image = (dataset[i]["obs"]["image"].cpu().numpy()[0].transpose(1, 2, 0) * 255).astype(np.uint8)
-            cv2.imshow("image", image)
-            cv2.waitKey(0)
+            # cv2.imshow("control", control_image)
+            # cv2.waitKey(0)
+            # image = (dataset[i]["obs"]["image"].cpu().numpy()[0].transpose(1, 2, 0) * 255).astype(np.uint8)
+            # cv2.imshow("image", image)
+            # cv2.waitKey(0)
