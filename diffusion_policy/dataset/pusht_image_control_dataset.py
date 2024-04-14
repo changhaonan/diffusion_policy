@@ -42,7 +42,7 @@ class PushTControlDataset(PushTImageDataset):
         demo_type = sample["demo_type"]
         data["demo_type"] = demo_type
         # Add control to the data
-        if demo_type == 0 and self.pad_control:
+        if demo_type.max() == 0 and self.pad_control:
             # Randomly sample a controlled episode
             random_idx = np.random.choice(self.demo_type_indices[1])
             random_sample = self.sampler.sample_sequence(random_idx)
