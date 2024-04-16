@@ -12,7 +12,7 @@ import pygame
 
 @click.command()
 @click.option("-o", "--output", default="data/kowndi_pusht_demo_v1.zarr", type=str)
-@click.option("-c", "--control", default="region", help="region, repulse, follow")
+@click.option("-c", "--control", default="repulse", help="region, repulse, follow")
 @click.option("-dv", "--demo_violate", default=True, help="Record violating demonstrations.")
 @click.option("-rs", "--render_size", default=96, type=int)
 @click.option("-hz", "--control_hz", default=10, type=int)
@@ -32,6 +32,7 @@ def main(output, control, demo_violate, render_size, control_hz):
     """
 
     control_repeat = 2  # repeat each control for K times
+    violate_repeat = 2  # repeat each violating episode for K times
     # create replay buffer in read-write mode
     output = output.replace(".zarr", "") + f"_{control}.zarr"
     replay_buffer = ReplayBuffer.create_from_path(output, mode="a")
@@ -41,6 +42,8 @@ def main(output, control, demo_violate, render_size, control_hz):
     agent = env.teleop_agent()
     clock = pygame.time.Clock()
 
+    reset_state = None
+    loop_counter = 0
     # episode-level while loop
     while True:
         episode = list()
@@ -63,21 +66,21 @@ def main(output, control, demo_violate, render_size, control_hz):
             obs = env.reset()
         else:
             # collecting violating demonstrations, sample from existing episodes
-            random_episode = np.random.randint(0, num_existing_episodes)
-
-            # set seed for env
-            seed = random_episode // control_repeat
-            env.seed(seed)
-            sampled_episode = replay_buffer.get_episode(random_episode)
-            episode_len = sampled_episode["img"].shape[0]
-            if episode_len < 10 or sampled_episode["demo_type"][0].item() == 2:
-                # skip if the episode is too short or already violating
-                continue
-            # sample a state
-            state_idx = np.random.randint(0, int(0.7 * episode_len))  # sample from the first 70% of the episode
-            state = sampled_episode["state"][state_idx]
+            if reset_state is None or loop_counter % violate_repeat == 0:
+                random_episode = np.random.randint(0, num_existing_episodes)
+                # set seed for env
+                seed = random_episode // control_repeat
+                env.seed(seed)
+                sampled_episode = replay_buffer.get_episode(random_episode)
+                episode_len = sampled_episode["img"].shape[0]
+                if episode_len < 10 or sampled_episode["demo_type"][0].item() == 2:
+                    # skip if the episode is too short or already violating
+                    continue
+                # sample a state
+                state_idx = np.random.randint(0, int(0.7 * episode_len))  # sample from the first 70% of the episode
+                reset_state = sampled_episode["state"][state_idx]
             # reset env to the sampled state
-            obs = env.reset_from_state(state)
+            obs = env.reset_from_state(reset_state)
 
         info = env._get_info()
         img = env.render(mode="human")
@@ -165,7 +168,8 @@ def main(output, control, demo_violate, render_size, control_hz):
             print(f"saved seed {seed}")
         else:
             print(f"retry seed {seed}")
-        print(f"current n_episodes: {replay_buffer.n_episodes}")
+        print(f"n_episodes: {replay_buffer.n_episodes}; n_steps: {replay_buffer.n_steps}")
+        loop_counter += 1
 
 
 if __name__ == "__main__":
