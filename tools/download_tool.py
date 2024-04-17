@@ -9,6 +9,7 @@ def download_dataset(data_src, download_key: str):
         f"kowndi_pusht_demo_v0_follow": "https://drive.google.com/file/d/1AohGsWMvZuaYsFM4slEEL5MO7LC9zQO0/view?usp=sharing",
         f"kowndi_pusht_demo_v0_region": "https://drive.google.com/file/d/1DkKaj-t5GF2inKlpJQ32pT7_UpxtKBSr/view?usp=sharing",
         f"kowndi_pusht_demo_v1_repulse": "https://drive.google.com/file/d/1LOywDZMYe6N_rmeBVSE0Ywm2TjdQ9rQU/view?usp=sharing",
+        f"kowndi_pusht_demo_v2_repulse": "https://drive.google.com/file/d/1Xy6y7dFnXTJzk1s81XZD-yBogOs2PhG2/view?usp=sharing",
     }
     url = url_dict[download_key]
     output = f"{data_src}/{download_key}.zarr.tar.xz"
@@ -26,8 +27,9 @@ def download_dataset(data_src, download_key: str):
 if __name__ == "__main__":
     import os
 
-    data_version = 1
-    server_type = "local" if not os.path.exists("/common/users") else "ilab"
+    data_version = 2
+    # server_type = "local" if not os.path.exists("/common/users") else "ilab"
+    server_type = "local"
     netid = "hc856"
     control_type = "repulse"
     if server_type == "local":
