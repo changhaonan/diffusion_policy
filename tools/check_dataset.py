@@ -1,10 +1,13 @@
-"""Check the dataset"""
+"""Check the dataset; Provide a data analysis."""
 
 import os
 import numpy as np
 import zarr
 import cv2
 from tqdm.auto import tqdm
+from diffusion_policy.common.replay_buffer import ReplayBuffer
+from diffusion_policy.common.sampler import SequenceSampler
+from diffusion_policy.common.sampler import SequenceSampler, get_val_mask, downsample_mask
 
 
 def read_from_path(zarr_path, mode="r"):
@@ -12,6 +15,22 @@ def read_from_path(zarr_path, mode="r"):
     for key, value in root.items():
         print(f"{key}: {value}")
     return root
+
+
+def analysis_dataset(zarr_path):
+    replay_buffer = ReplayBuffer.create_from_path(zarr_path, mode="r")
+    sampler = SequenceSampler(replay_buffer=replay_buffer, sequence_length=1, pad_before=0, pad_after=0)
+    total_len = len(sampler)
+    print(f"Total number of samples: {total_len}")
+    print(f"Total number of episodes: {replay_buffer.n_episodes}")
+    statics = {}
+    for idx in tqdm(range(total_len)):
+        sample = sampler.sample_sequence(idx)
+        demo_type = sample["demo_type"].max() if "demo_type" in sample else 0
+        if demo_type not in statics:
+            statics[demo_type] = 0
+        statics[demo_type] += 1
+    print(statics)
 
 
 def visualize_dataset(root, wait_time=18, shuffle=False):
@@ -44,13 +63,14 @@ if __name__ == "__main__":
     wait_time = 100
     server_type = "ilab" if os.path.exists("/common/users") else "local"
     netid = "hc856"
-    data_version = 1
+    data_version = 2
     control_type = "repulse"
     if server_type == "local":
         data_src = "./data"
     elif server_type == "ilab":
         data_src = f"/common/users/{netid}/Project/diffusion_policy/data"
 
-    src_data = f"{data_src}/kowndi_pusht_demo_v{data_version}_{control_type}.zarr"
-    root = read_from_path(src_data)
-    visualize_dataset(root, wait_time=wait_time, shuffle=True)
+    zarr_path = f"{data_src}/kowndi_pusht_demo_v{data_version}_{control_type}.zarr"
+    root = read_from_path(zarr_path)
+    # visualize_dataset(root, wait_time=wait_time, shuffle=True)
+    analysis_dataset(zarr_path)
