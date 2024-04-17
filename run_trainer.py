@@ -6,7 +6,7 @@ import os
 @click.option("--arch", "-a", default="cnn", type=str, help="cnn or transformer")
 @click.option("--netid", "-n", default="hc856", type=str)
 @click.option("--data_src", "-d", default="", type=str)
-@click.option("--data_version", "-v", default=1, type=int)
+@click.option("--data_version", "-v", default=2, type=int)
 @click.option("--control_type", "-t", default="repulse", type=str, help="repulse, region, follow")
 @click.option("--control_model", "-m", default="control_gate_unet", type=str, help="control_gate_unet, control_unet")
 @click.option("--integrate_type", "-i", default="concat", type=str, help="concat or controlnet")
