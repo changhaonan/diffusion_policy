@@ -52,6 +52,8 @@ def visualize_dataset(root, wait_time=18, shuffle=False):
         demo_type = data["demo_type"][start:end].max()
         for j in range(len(image)):
             vis_image = cv2.addWeighted(image[j], 0.5, control[j], 0.5, 0)
+            # Reshape to 480x480
+            vis_image = cv2.resize(vis_image, (480, 480))
             # Add text on demo_type
             cv2.putText(vis_image, f"D: {demo_type}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
             cv2.imshow(f"episode-{i}", vis_image)
@@ -60,7 +62,7 @@ def visualize_dataset(root, wait_time=18, shuffle=False):
 
 
 if __name__ == "__main__":
-    wait_time = 100
+    wait_time = 10
     server_type = "ilab" if os.path.exists("/common/users") else "local"
     netid = "hc856"
     data_version = 2
@@ -72,5 +74,5 @@ if __name__ == "__main__":
 
     zarr_path = f"{data_src}/kowndi_pusht_demo_v{data_version}_{control_type}.zarr"
     root = read_from_path(zarr_path)
-    # visualize_dataset(root, wait_time=wait_time, shuffle=True)
+    visualize_dataset(root, wait_time=wait_time, shuffle=False)
     analysis_dataset(zarr_path)
