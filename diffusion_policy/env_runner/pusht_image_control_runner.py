@@ -6,6 +6,7 @@ import pathlib
 import tqdm
 import dill
 import math
+from matplotlib import pyplot as plt
 import wandb.sdk.data_types.video as wv
 from diffusion_policy.env.pusht.pusht_control import PushTControlImageEnv
 from diffusion_policy.gym_util.async_vector_env import AsyncVectorEnv
@@ -215,6 +216,7 @@ class PushTImageControlRunner(BaseImageRunner):
         max_rewards = collections.defaultdict(list)
         max_violates = collections.defaultdict(list)
         log_data = dict()
+        metric_dict = dict()
         # results reported in the paper are generated using the commented out line below
         # which will only report and average metrics from first n_envs initial condition and seeds
         # fortunately this won't invalidate our conclusion since
@@ -236,6 +238,12 @@ class PushTImageControlRunner(BaseImageRunner):
                 max_violate = np.max(all_violates[i])
             max_violates[prefix].append(max_violate)
             log_data[prefix + f"sim_max_violate_{seed}"] = max_violate
+
+            if prefix not in metric_dict:
+                metric_dict[prefix] = dict()
+            metric_dict[prefix][f"sim_max_reward_{seed}"] = max_reward
+            metric_dict[prefix][f"sim_max_violate_{seed}"] = max_violate
+
             # visualize sim
             video_path = all_video_paths[i]
             if video_path is not None:
@@ -252,5 +260,26 @@ class PushTImageControlRunner(BaseImageRunner):
             name = prefix + "mean_violate"
             value = np.mean(value)
             log_data[name] = value
+
+        # table on score & violate
+        for prefix in self.env_prefixs:
+            # Score
+            score_data = [[int(k.split("_")[-1]), v] for k, v in metric_dict[prefix].items() if "sim_max_reward" in k]
+            # Draw the score table
+            score_table_fig = plt.figure()
+            score_table_ax = score_table_fig.add_subplot(111)
+            score_table_ax.axis("off")
+            score_table_ax.table(cellText=score_data, colLabels=["seed", "score"], loc="center")
+            plt.close(score_table_fig)
+            log_data[prefix + "score_table"] = wandb.Image(score_table_fig)
+            # Violate
+            violate_data = [[int(k.split("_")[-1]), v] for k, v in metric_dict[prefix].items() if "sim_max_violate" in k]
+            # Draw the violate table
+            violate_table_fig = plt.figure()
+            violate_table_ax = violate_table_fig.add_subplot(111)
+            violate_table_ax.axis("off")
+            violate_table_ax.table(cellText=violate_data, colLabels=["seed", "violate"], loc="center")
+            plt.close(violate_table_fig)
+            log_data[prefix + "violate_table"] = wandb.Image(violate_table_fig)
 
         return log_data

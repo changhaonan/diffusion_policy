@@ -5,6 +5,11 @@
 python train.py --config-dir=. --config-name=image_pusht_control_diffusion_policy_cnn.yaml policy.integrate_type='controlnet' training.seed=42 training.device=cuda:0 hydra.run.dir='/common/users/hc856/Project/diffusion_policy/data/outputs/${now:%Y.%m.%d}/${now:%H.%M.%S}_${name}_${task_name}'
 ```
 
+2. Eval command:
+```
+python eval.py -c /common/users/hc856/Data/diffusion_policy/checkpoints/latest.ckpt -o ./data/outputs/eval -d cuda:1
+```
+
 # Diffusion Policy
 
 <!-- [[Project page]](https://diffusion-policy.cs.columbia.edu/)

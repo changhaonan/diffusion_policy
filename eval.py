@@ -32,10 +32,8 @@ def main(checkpoint, output_dir, device):
     # load checkpoint
     payload = torch.load(open(checkpoint, "rb"), pickle_module=dill)
     cfg = payload["cfg"]
-    # HACK: replace cfg for testing
-    cfg.task.env_runner._target_ = "diffusion_policy.env_runner.pusht_image_control_runner.PushTImageControlRunner"
-    cfg.task.env_runner.control_type = "follow"
-    # END HACK
+    # Override cfg
+    cfg.policy.cfg_ratio = -0.1
     cls = hydra.utils.get_class(cfg._target_)
     workspace = cls(cfg, output_dir=output_dir)
     workspace: BaseWorkspace
@@ -58,6 +56,8 @@ def main(checkpoint, output_dir, device):
     json_log = dict()
     for key, value in runner_log.items():
         if isinstance(value, wandb.sdk.data_types.video.Video):
+            json_log[key] = value._path
+        elif isinstance(value, wandb.sdk.data_types.image.Image):
             json_log[key] = value._path
         else:
             json_log[key] = value
