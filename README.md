@@ -10,6 +10,11 @@ python train.py --config-dir=. --config-name=image_pusht_control_diffusion_polic
 python eval.py -c /common/users/hc856/Data/diffusion_policy/checkpoints/latest.ckpt -o ./data/outputs/eval -d cuda:1
 ```
 
+3. Score Analysis
+```
+python tools/score_analysis.py -c ./data/outputs/2024.04.16/22.50.05_train_diffusion_unet_hybrid_pusht_image/checkpoints/latest.ckpt -o ./data/outputs/eval -d cuda:0
+```
+
 # Diffusion Policy
 
 <!-- [[Project page]](https://diffusion-policy.cs.columbia.edu/)

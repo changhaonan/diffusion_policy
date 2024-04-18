@@ -270,6 +270,7 @@ class PushTControlImageEnv(PushTControlEnv):
 
     def __init__(self, control_type="region", default_control=True, legacy=False, block_cog=None, damping=None, render_size=96, render_action=False):
         super().__init__(control_type, default_control, legacy, block_cog, damping, render_size, render_action)
+        # Render options
 
     def _get_obs(self):
         img = super()._render_frame(mode="rgb_array")
