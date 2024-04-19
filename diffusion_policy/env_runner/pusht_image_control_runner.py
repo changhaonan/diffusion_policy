@@ -190,7 +190,7 @@ class PushTImageControlRunner(BaseImageRunner):
 
                 # run policy
                 with torch.no_grad():
-                    action_dict = policy.predict_action(obs_dict, gate=1)
+                    action_dict = policy.predict_action(obs_dict, gate=0)
 
                 # device_transfer
                 np_action_dict = dict_apply(action_dict, lambda x: x.detach().to("cpu").numpy())

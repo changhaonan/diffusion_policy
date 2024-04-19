@@ -67,7 +67,8 @@ policy:
   control_model: "control_gate_unet"
   integrate_type: "concat"
   control_in_decoder: false
-  cfg_ratio: -0.3  # classifier-free-guidance
+  cfg_ratio: 0.0  # classifier-free-guidance
+  mask_prob: 1.0  # mask_prob to train unconditional policy
   horizon: 16
   kernel_size: 5
   n_action_steps: 8
@@ -125,13 +126,13 @@ task:
   dataset:
     _target_: diffusion_policy.dataset.pusht_image_control_dataset.PushTControlDataset
     horizon: 16
-    max_train_episodes: 10000  # 0.85 of 800 episode; region: 680; repulse: 400;
+    max_train_episodes: 10000  # set to a very large number
     pad_after: 7
     pad_before: 1
     seed: 42
     val_ratio: 0.1
     zarr_path: data/kowndi_pusht_demo_v2_repulse.zarr
-    pad_control: false
+    enable_stitching: true
   env_runner:
     _target_: diffusion_policy.env_runner.pusht_image_control_runner.PushTImageControlRunner
     control_type: "region"

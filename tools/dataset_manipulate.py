@@ -3,12 +3,12 @@ Notice: Compressor matters!!!
 """
 
 import os
-import numcodecs
 import numpy as np
 import zarr
 import random
 from tqdm.auto import tqdm
 from diffusion_policy.common.replay_buffer import ReplayBuffer
+from diffusion_policy.control_utils.trajectory_stitching import stitch_trajectory
 
 
 def read_from_path(zarr_path, mode="r"):

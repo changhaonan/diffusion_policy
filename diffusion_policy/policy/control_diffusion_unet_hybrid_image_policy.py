@@ -47,6 +47,7 @@ class ControlDiffusionUnetHybridImagePolicy(BaseImagePolicy):
         control_model="control_gate_unet",
         integrate_type="concat",
         cfg_ratio=0.3,
+        mask_prob=0.0,
         control_in_decoder=False,
         **kwargs,
     ):
@@ -169,6 +170,7 @@ class ControlDiffusionUnetHybridImagePolicy(BaseImagePolicy):
         ################################ Control related parameters ################################
         self.integrate_type = integrate_type
         self.cfg_ratio = cfg_ratio
+        self.mask_prob = mask_prob
         assert self.obs_as_global_cond, "control diffusion policy requires obs_as_global_cond=True"
         print("Diffusion params: %e" % sum(p.numel() for p in self.model.parameters()))
         print("Vision params: %e" % sum(p.numel() for p in self.obs_encoder.parameters()))
@@ -189,6 +191,14 @@ class ControlDiffusionUnetHybridImagePolicy(BaseImagePolicy):
             else:
                 obs_dim += int(np.prod(feat_shape))
         return obs_dim, control_dim
+
+    def _apply_control_mask(self, obs_dict: Dict[str, torch.Tensor], mask_prob: float):
+        if mask_prob > 0:
+            control = obs_dict["control"]
+            batch_size = control.shape[0]
+            mask = torch.rand(batch_size, device=control.device) < mask_prob
+            obs_dict["control"][mask] = 0
+        return obs_dict
 
     # ========= inference  ============
     def conditional_sample(
@@ -251,6 +261,10 @@ class ControlDiffusionUnetHybridImagePolicy(BaseImagePolicy):
 
         # handle different ways of passing observation
         global_cond = None
+
+        if gate == 0:
+            nobs = self._apply_control_mask(nobs, 1.0)
+
         # condition through global feature
         this_nobs = dict_apply(nobs, lambda x: x[:, :To, ...].reshape(-1, *x.shape[2:]))
 
@@ -294,6 +308,9 @@ class ControlDiffusionUnetHybridImagePolicy(BaseImagePolicy):
         global_cond = None
         trajectory = nactions
         cond_data = trajectory
+
+        # randomly mask out control
+        nobs = self._apply_control_mask(nobs, self.mask_prob)
 
         # reshape B, T, ... to B*T
         this_nobs = dict_apply(nobs, lambda x: x[:, : self.n_obs_steps, ...].reshape(-1, *x.shape[2:]))

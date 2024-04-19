@@ -15,6 +15,11 @@ python eval.py -c /common/users/hc856/Data/diffusion_policy/checkpoints/latest.c
 python tools/score_analysis.py -c ./data/outputs/2024.04.16/22.50.05_train_diffusion_unet_hybrid_pusht_image/checkpoints/latest.ckpt -o ./data/outputs/eval -d cuda:0
 ```
 
+4. Trajectory stitching
+```
+python diffusion_policy/control_utils/trajectory_stitching.py -i data/kowndi_pusht_demo_v2_repulse.zarr -o data/outputs/trajectory_stitching/kowndi_pusht_demo_v2_repulse.npy
+```
+
 # Diffusion Policy
 
 <!-- [[Project page]](https://diffusion-policy.cs.columbia.edu/)
