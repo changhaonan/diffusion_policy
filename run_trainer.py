@@ -17,12 +17,17 @@ def main(arch, netid, data_src, data_version, control_type, control_model, integ
     server_type = "local" if not os.path.exists("/common/users") else "ilab"
     if server_type == "local":
         data_src = "./data"
+        num_workers = 8
     elif server_type == "ilab":
         data_src = f"/common/users/{netid}/Project/diffusion_policy/data"
+        num_workers = 16
     else:
         data_src = data_src
+        num_workers = 8
 
     command = f"python train.py --config-dir=. --config-name=image_pusht_control_diffusion_policy_{arch}.yaml"
+    command += f" dataloader.num_workers={num_workers}"
+    command += f" val_dataloader.num_workers={num_workers}"
     command += f" policy.control_model='{control_model}'"
     command += f" policy.integrate_type='{integrate_type}'"
     command += f" policy.cfg_ratio={cfg_ratio}"
