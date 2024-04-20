@@ -17,15 +17,17 @@ from diffusion_policy.gym_util.video_recording_wrapper import VideoRecordingWrap
 from diffusion_policy.policy.base_image_policy import BaseImagePolicy
 from diffusion_policy.common.pytorch_util import dict_apply
 from diffusion_policy.workspace.base_workspace import BaseWorkspace
+from diffusion_policy.control_utils.trajectory_filter import trajectory_filter
 
 
 def draw_action(image, agent_pos, naction, project_matrix=None, color=None):
     agent_pos = agent_pos @ project_matrix
     naction = naction @ project_matrix
 
-    action_alpha = np.linspace(0.5, 1, naction.shape[1])
+    # action_alpha = np.linspace(0.5, 1, naction.shape[1])
+    action_alpha = np.ones(naction.shape[1])
     for i in range(naction.shape[0]):
-        traj_color = np.random.rand(3) * 255 if color is None else color
+        traj_color = np.random.rand(3) * 255 if color is None else (color * 0.5 + i / len(naction) * np.array([0, 0, 255])).astype(int)
         for j in range(naction.shape[1]):
             color_alpha = traj_color * action_alpha[j]
             cv2.circle(image, tuple(naction[i, j].astype(int)), 2, color_alpha, 1)
@@ -47,6 +49,7 @@ class PushTScoreAnalysis:
         max_steps=200,
         n_obs_steps=2,
         n_action_steps=8,
+        use_filter=False,
         **kwargs,
     ):
         self.env = PushTControlImageEnv(control_type=control_type, default_control=default_control, legacy=legacy_test, render_size=render_size)
@@ -55,6 +58,7 @@ class PushTScoreAnalysis:
         self.n_obs_steps = n_obs_steps  # Number of observation steps
         self.n_action_steps = n_action_steps  # Number of action steps executed
         self.project_matrix = np.array([[1.0, 0], [0, 1.0]]) if "project_matrix" not in kwargs else kwargs["project_matrix"]
+        self.use_filter = use_filter
 
     def run(self, policy: BaseImagePolicy, seed=0, batch_size=64, record_step=5, gates=[0, 1], enable_render=True):
         device = policy.device
@@ -96,9 +100,17 @@ class PushTScoreAnalysis:
 
             action = gate_action_dict[gates[0]]["action"]  # First gate
 
+            if self.use_filter:
+                # Filter trajectory
+                action = trajectory_filter(action, control=np_obs_dict["control"][0, -1], control_type=env.control_type)
+                gate_action_dict[gates[0]]["action"] = action
+
             for idx in range(self.n_action_steps):
                 # Step env
                 obs, reward, done, info = env.step(action[0][idx])
+                violate = env._compute_violate(threshold=22)
+                if violate:
+                    print(f"Violate at step {i} / {self.max_steps}")
                 obs_deque.append(obs)
                 img = env.render(mode="rgb_array")
                 # Reshape to 512x512
@@ -115,15 +127,15 @@ class PushTScoreAnalysis:
                     else:
                         color = np.array([255, 255, 255])
                     img = draw_action(img, agent_poses[0], gate_action, self.project_matrix, color=color)
-                
+
                 # Render
                 if enable_render:
-                    print(f"Step {i} / {self.max_steps}")
+                    # print(f"Step {i} / {self.max_steps}")
                     cv2.imshow("image", img)
                     cv2.waitKey(1)
                 if done:
                     break
-            
+
             if i % record_step == 0:
                 img_list.append(img.copy())
             if done:
@@ -159,10 +171,15 @@ def main(checkpoint, output_dir, device):
     policy.eval()
 
     # Run score analysis
-    seed = 1
+    seed = 11
+    use_filter = True
+    gates = [0]
     batch_size = 64
-    score_analysis = PushTScoreAnalysis(output_dir)
-    score_analysis.run(policy, seed=seed, batch_size=batch_size, enable_render=True)
+    n_action_steps = 8
+    max_steps = 300
+    policy.n_action_steps = n_action_steps
+    score_analysis = PushTScoreAnalysis(output_dir, n_action_steps=n_action_steps, max_steps=max_steps, use_filter=use_filter)
+    score_analysis.run(policy, seed=seed, batch_size=batch_size, gates=gates, enable_render=True)
 
 
 if __name__ == "__main__":

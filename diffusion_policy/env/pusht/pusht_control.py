@@ -59,12 +59,13 @@ class PushTControlEnv(PushTEnv):
         )
         self.violate = list()  # Measure how many times the agent violates the control
 
-    def _compute_violate(self):
+    def _compute_violate(self, **kwargs):
         agent_pos = np.array(self.agent.position)
         if self.control_type == "repulse" and self.controls is not None:
             for point in self.controls:
                 dist = np.linalg.norm(agent_pos - point)
-                if dist < (self.control_params["repulse"]["radius"] + 15):
+                threshold = kwargs.get("threshold", self.control_params["repulse"]["radius"] + 15)
+                if dist < threshold:
                     # 15 is the radius of the agent
                     return 1.0
         elif self.control_type == "follow" and self.controls is not None:
