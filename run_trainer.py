@@ -8,7 +8,7 @@ import os
 @click.option("--data_src", "-d", default="", type=str)
 @click.option("--data_version", "-v", default=2, type=int)
 @click.option("--control_type", "-t", default="repulse", type=str, help="repulse, region, follow")
-@click.option("--control_model", "-m", default="control_gate_unet", type=str, help="control_gate_unet, control_unet")
+@click.option("--control_model", "-m", default="control_unet", type=str, help="control_gate_unet, control_unet")
 @click.option("--integrate_type", "-i", default="concat", type=str, help="concat or controlnet")
 @click.option("--cfg_ratio", "-r", default=0.0, type=float)
 @click.option("--cuda_id", "-c", default=0, type=int)

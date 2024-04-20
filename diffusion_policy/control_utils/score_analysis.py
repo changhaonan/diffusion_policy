@@ -9,6 +9,7 @@ import numpy as np
 import cv2
 import os
 import pathlib
+from tqdm.auto import tqdm
 import wandb.sdk.data_types.video as wv
 from diffusion_policy.gym_util.multistep_wrapper import MultiStepWrapper
 from diffusion_policy.env.pusht.pusht_control import PushTControlImageEnv
@@ -55,7 +56,7 @@ class PushTScoreAnalysis:
         self.n_action_steps = n_action_steps  # Number of action steps executed
         self.project_matrix = np.array([[1.0, 0], [0, 1.0]]) if "project_matrix" not in kwargs else kwargs["project_matrix"]
 
-    def run(self, policy: BaseImagePolicy, seed=0, batch_size=64, enable_render=True):
+    def run(self, policy: BaseImagePolicy, seed=0, batch_size=64, record_step=5, gates=[0, 1], enable_render=True):
         device = policy.device
         dtype = policy.dtype
         env = self.env
@@ -66,7 +67,8 @@ class PushTScoreAnalysis:
         policy.cfg_ratio = 0.0
 
         obs_deque = collections.deque([obs] * self.n_obs_steps, maxlen=self.n_obs_steps)
-        for i in range(self.max_steps):
+        img_list = []
+        for i in tqdm(range(int(self.max_steps / self.n_action_steps)), desc="Score Analysis: "):
             # Create obs dict
             images = np.stack([x["image"] for x in obs_deque])
             agent_poses = np.stack([x["agent_pos"] for x in obs_deque])
@@ -82,42 +84,51 @@ class PushTScoreAnalysis:
             obs_dict = dict_apply(np_obs_dict, lambda x: torch.from_numpy(x).to(device=device))
 
             # Run policy
+            gate_action_dict = {}
             with torch.no_grad():
-                action_dict = policy.predict_action(obs_dict, gate=0)
-                neg_action_dict = policy.predict_action(obs_dict, gate=2)
+                for gate in gates:
+                    action_dict = policy.predict_action(obs_dict, gate=gate)
+                    gate_action_dict[gate] = action_dict
 
             # device_transfer
-            np_action_dict = dict_apply(action_dict, lambda x: x.detach().to("cpu").numpy())
-            action = np_action_dict["action"]
-            np_neg_action_dict = dict_apply(neg_action_dict, lambda x: x.detach().to("cpu").numpy())
-            neg_action = np_neg_action_dict["action"]
+            for gate in gates:
+                gate_action_dict[gate] = dict_apply(gate_action_dict[gate], lambda x: x.to(device="cpu").numpy())
+
+            action = gate_action_dict[gates[0]]["action"]  # First gate
 
             for idx in range(self.n_action_steps):
                 # Step env
                 obs, reward, done, info = env.step(action[0][idx])
                 obs_deque.append(obs)
-
+                img = env.render(mode="rgb_array")
+                # Reshape to 512x512
+                img = cv2.resize(img, (512, 512))
+                # draw score
+                for gate in gates:
+                    gate_action = gate_action_dict[gate]["action"]
+                    if gate == 0:
+                        color = np.array([255, 0, 0])
+                    elif gate == 1:
+                        color = np.array([0, 255, 0])
+                    elif gate == 2:
+                        color = np.array([0, 0, 255])
+                    else:
+                        color = np.array([255, 255, 255])
+                    img = draw_action(img, agent_poses[0], gate_action, self.project_matrix, color=color)
+                
                 # Render
                 if enable_render:
-                    img = env.render(mode="rgb_array")
-                    # Reshape to 512x512
-                    img = cv2.resize(img, (512, 512))
-                    # draw score
-                    img = draw_action(img, agent_poses[0], action, self.project_matrix, color=np.array([0, 255, 0]))
-                    img = draw_action(img, agent_poses[0], neg_action, self.project_matrix, color=np.array([0, 0, 255]))
+                    print(f"Step {i} / {self.max_steps}")
                     cv2.imshow("image", img)
                     cv2.waitKey(1)
-                    # # Press space to pause
-                    # if cv2.waitKey(10) == 32:
-                    #     print("Paused")
-                    #     cv2.waitKey(0)
                 if done:
                     break
-            print(f"Step {i} / {self.max_steps}")
-            cv2.waitKey(1)
+            
+            if i % record_step == 0:
+                img_list.append(img.copy())
             if done:
                 break
-        cv2.destroyAllWindows()
+        return img_list
 
 
 @click.command()

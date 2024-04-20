@@ -20,6 +20,7 @@ from diffusion_policy.common.pytorch_util import dict_apply
 
 # from diffusion_policy.env_runner.pusht_image_runner import PushTImageRunner
 from diffusion_policy.env_runner.base_image_runner import BaseImageRunner
+from diffusion_policy.control_utils.score_analysis import PushTScoreAnalysis
 
 
 class PushTImageControlRunner(BaseImageRunner):
@@ -125,6 +126,16 @@ class PushTImageControlRunner(BaseImageRunner):
         # x = env.step(env.action_space.sample())
         # imgs = env.call('render')
         # import pdb; pdb.set_trace()
+        self.score_analysis = PushTScoreAnalysis(
+            output_dir,
+            control_type=control_type,
+            default_control=default_control,
+            legacy_test=legacy_test,
+            render_size=render_size,
+            max_steps=max_steps,
+            n_obs_steps=n_obs_steps,
+            n_action_steps=n_action_steps,
+        )
 
         self.env = env
         self.env_fns = env_fns
@@ -282,4 +293,8 @@ class PushTImageControlRunner(BaseImageRunner):
             plt.close(violate_table_fig)
             log_data[prefix + "violate_table"] = wandb.Image(violate_table_fig)
 
+        # do score analysis
+        img_list = self.score_analysis.run(policy, seed=0, batch_size=64, record_step=5, gates=[0], enable_render=False)
+        for i, img in enumerate(img_list):
+            log_data[f"test/score_analysis_{i}"] = wandb.Image(img)
         return log_data
