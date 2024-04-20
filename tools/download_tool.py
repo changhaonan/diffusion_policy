@@ -28,8 +28,8 @@ if __name__ == "__main__":
     import os
 
     data_version = 2
-    # server_type = "local" if not os.path.exists("/common/users") else "ilab"
-    server_type = "local"
+    server_type = "local" if not os.path.exists("/common/users") else "ilab"
+    # server_type = "local"
     netid = "hc856"
     control_type = "repulse"
     if server_type == "local":
