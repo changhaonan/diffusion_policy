@@ -164,7 +164,7 @@ if __name__ == "__main__":
     pad_control = True
     root_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     zarr_path = os.path.join(root_path, "data/kowndi_pusht_demo_v2_repulse.zarr")
-    dataset = PushTControlDataset(zarr_path=zarr_path, horizon=16, pad_before=1, pad_after=7, seed=42, val_ratio=0.1, max_train_episodes=None, enable_stitching=True)
+    dataset = PushTControlDataset(zarr_path=zarr_path, horizon=16, pad_before=1, pad_after=7, seed=42, val_ratio=0.1, max_train_episodes=None, enable_stitching=False)
     for i in range(len(dataset)):
         print(f"Processing {i}/{len(dataset)}")
         control = dataset[i]["obs"]["control"].cpu().numpy()[0].transpose(1, 2, 0)

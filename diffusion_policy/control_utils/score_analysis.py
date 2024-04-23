@@ -18,6 +18,7 @@ from diffusion_policy.policy.base_image_policy import BaseImagePolicy
 from diffusion_policy.common.pytorch_util import dict_apply
 from diffusion_policy.workspace.base_workspace import BaseWorkspace
 from diffusion_policy.control_utils.trajectory_filter import trajectory_filter
+from diffusion_policy.control_utils.frequence_policy import FreqActionFieldPolicy
 
 
 def draw_action(image, agent_pos, naction, project_matrix=None, color=None):
@@ -67,6 +68,7 @@ class PushTScoreAnalysis:
         env.seed(seed)
 
         obs = env.reset()
+        info = env._get_info()
         policy.reset()
         policy.cfg_ratio = 0.0
 
@@ -91,7 +93,7 @@ class PushTScoreAnalysis:
             gate_action_dict = {}
             with torch.no_grad():
                 for gate in gates:
-                    action_dict = policy.predict_action(obs_dict, gate=gate)
+                    action_dict = policy.predict_action(obs_dict, gate=gate, info=info)
                     gate_action_dict[gate] = action_dict
 
             # device_transfer
@@ -151,32 +153,37 @@ def main(checkpoint, output_dir, device):
     if not os.path.exists(output_dir):
         pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)
 
-    # load checkpoint
-    payload = torch.load(open(checkpoint, "rb"), pickle_module=dill)
-    cfg = payload["cfg"]
-    # Override cfg
-    cfg.policy.cfg_ratio = -0.1
-    cls = hydra.utils.get_class(cfg._target_)
-    workspace = cls(cfg, output_dir=output_dir)
-    workspace: BaseWorkspace
-    workspace.load_payload(payload, exclude_keys=None, include_keys=None)
+    use_frequence_policy = True
 
-    # get policy from workspace
-    policy = workspace.model
-    if cfg.training.use_ema:
-        policy = workspace.ema_model
+    if not use_frequence_policy:
+        # load checkpoint
+        payload = torch.load(open(checkpoint, "rb"), pickle_module=dill)
+        cfg = payload["cfg"]
+        # Override cfg
+        cfg.policy.cfg_ratio = 0.0
+        cls = hydra.utils.get_class(cfg._target_)
+        workspace = cls(cfg, output_dir=output_dir)
+        workspace: BaseWorkspace
+        workspace.load_payload(payload, exclude_keys=None, include_keys=None)
 
-    device = torch.device(device)
-    policy.to(device)
-    policy.eval()
+        # get policy from workspace
+        policy = workspace.model
+        if cfg.training.use_ema:
+            policy = workspace.ema_model
+        device = torch.device(device)
+        policy.to(device)
+        policy.eval()
+    else:
+        # load frequence policy
+        policy = FreqActionFieldPolicy(zarr_path="/home/harvey/Project/diffusion_policy/data/kowndi_pusht_demo_v2_repulse.zarr", horizon=16, pad_before=1, pad_after=7)
 
     # Run score analysis
-    seed = 11
-    use_filter = True
+    seed = 10011
+    use_filter = False
     gates = [0]
     batch_size = 64
     n_action_steps = 8
-    max_steps = 300
+    max_steps = 600
     policy.n_action_steps = n_action_steps
     score_analysis = PushTScoreAnalysis(output_dir, n_action_steps=n_action_steps, max_steps=max_steps, use_filter=use_filter)
     score_analysis.run(policy, seed=seed, batch_size=batch_size, gates=gates, enable_render=True)

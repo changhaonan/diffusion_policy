@@ -186,6 +186,10 @@ class AsyncVectorEnv(VectorEnv):
         _, successes = zip(*[pipe.recv() for pipe in self.parent_pipes])
         self._raise_if_errors(successes)
 
+    def get_info(self):
+        self._assert_is_running()
+        return self.call("get_info")
+
     def reset_async(self):
         self._assert_is_running()
         if self._state != AsyncState.DEFAULT:

@@ -184,6 +184,7 @@ class PushTImageControlRunner(BaseImageRunner):
 
             # start rollout
             obs = env.reset()
+            info = env.get_info()
             past_action = None
             policy.reset()
 
@@ -201,7 +202,7 @@ class PushTImageControlRunner(BaseImageRunner):
 
                 # run policy
                 with torch.no_grad():
-                    action_dict = policy.predict_action(obs_dict, gate=0)
+                    action_dict = policy.predict_action(obs_dict, gate=0, info=info)
 
                 # device_transfer
                 np_action_dict = dict_apply(action_dict, lambda x: x.detach().to("cpu").numpy())

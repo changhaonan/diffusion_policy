@@ -107,6 +107,9 @@ class PushTControlEnv(PushTEnv):
         self._init_control()
         return obs
 
+    def get_info(self):
+        return super()._get_info()
+
     def _init_control(self):
         # Generate control values
         seed = self._seed

@@ -18,13 +18,15 @@ import dill
 import wandb
 import json
 from diffusion_policy.workspace.base_workspace import BaseWorkspace
+from diffusion_policy.control_utils.frequence_policy import FreqActionFieldPolicy
 
 
 @click.command()
 @click.option("-c", "--checkpoint", required=True)
 @click.option("-o", "--output_dir", required=True)
 @click.option("-d", "--device", default="cuda:0")
-def main(checkpoint, output_dir, device):
+@click.option("-f", "--freq", default=False, help="Use frequence action field policy.")
+def main(checkpoint, output_dir, device, freq):
     if os.path.exists(output_dir):
         click.confirm(f"Output path {output_dir} already exists! Overwrite?", abort=True)
     pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)
@@ -39,15 +41,18 @@ def main(checkpoint, output_dir, device):
     workspace: BaseWorkspace
     workspace.load_payload(payload, exclude_keys=None, include_keys=None)
 
-    # get policy from workspace
-    policy = workspace.model
-    if cfg.training.use_ema:
-        policy = workspace.ema_model
+    if not freq:
+        # get policy from workspace
+        policy = workspace.model
+        if cfg.training.use_ema:
+            policy = workspace.ema_model
 
-    device = torch.device(device)
-    policy.to(device)
-    policy.eval()
-
+        device = torch.device(device)
+        policy.to(device)
+        policy.eval()
+    else:
+        knn = 2
+        policy = FreqActionFieldPolicy(zarr_path="/home/harvey/Project/diffusion_policy/data/kowndi_pusht_demo_v2_repulse.zarr", horizon=16, pad_before=1, pad_after=7, knn=knn)
     # run eval
     env_runner = hydra.utils.instantiate(cfg.task.env_runner, output_dir=output_dir)
     runner_log = env_runner.run(policy)
