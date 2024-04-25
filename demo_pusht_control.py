@@ -131,9 +131,11 @@ def main(output, control, demo_violate, render_size, control_hz):
                 state = np.concatenate([info["pos_agent"], info["block_pose"]])
                 # discard unused information such as visibility mask and agent pos
                 # for compatibility
+                keypoint = obs.reshape(2, -1)[0].reshape(-1, 2)[:9]
                 data = {
                     "img": img,
                     "state": np.float32(state),
+                    "keypoint": np.float32(keypoint),
                     "action": np.float32(act),
                     "n_contacts": np.float32([info["n_contacts"]]),
                     "control": env.get_control_image(),
