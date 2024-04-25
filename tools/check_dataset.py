@@ -74,5 +74,5 @@ if __name__ == "__main__":
 
     zarr_path = f"{data_src}/kowndi_pusht_demo_v{data_version}_{control_type}.zarr"
     root = read_from_path(zarr_path)
-    # visualize_dataset(root, wait_time=wait_time, shuffle=False)
+    visualize_dataset(root, wait_time=wait_time, shuffle=False)
     analysis_dataset(zarr_path)
