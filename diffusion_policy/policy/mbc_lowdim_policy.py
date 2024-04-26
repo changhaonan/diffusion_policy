@@ -7,7 +7,7 @@ import torch.nn as nn
 from omegaconf import OmegaConf
 import torch.nn.functional as F
 from diffusion_policy.model.common.normalizer import LinearNormalizer
-from diffusion_policy.control_utils.mmmlp import MMMLP
+from diffusion_policy.control_utils.mmmlp import MMNet
 from diffusion_policy.policy.base_lowdim_policy import BaseLowdimPolicy
 
 
@@ -20,7 +20,14 @@ class MBCLowdimPolicy(BaseLowdimPolicy):
         self.n_action_steps = n_action_steps
         self.n_obs_steps = n_obs_steps
         # Assemble model; input n_obs_steps, predict n_action_steps
-        self.model = MMMLP(x_dim=obs_dim * n_obs_steps, y_dim=action_dim * horizon, k=n_max_modality)
+        self.model = MMNet(
+            obs_dim=obs_dim,
+            act_dim=action_dim,
+            obs_steps=n_obs_steps,
+            action_steps=n_action_steps,
+            k=n_max_modality,
+            **kwargs,
+        )
         self.normalizer = LinearNormalizer()
         self.bias_factor = 10.0
 
@@ -38,7 +45,7 @@ class MBCLowdimPolicy(BaseLowdimPolicy):
 
         # Predict using MMMLP
         action_pred, p_pred = self.model(nobs.view(nobs.shape[0], -1))  # (B, k * action_dim), (B, k)
-        p_pred = F.softmax(p_pred, dim=-1)
+        # p_pred = F.softmax(p_pred, dim=-1)
 
         # Un-normalize
         action_pred = action_pred.reshape(action_pred.shape[0], self.model.k * self.horizon, self.action_dim)
@@ -48,7 +55,8 @@ class MBCLowdimPolicy(BaseLowdimPolicy):
         p_thresh = 0.5 * (1.0 / self.model.k)
         # If p_pred is smaller than p_thresh, set it to 0
         p_pred = torch.where(p_pred < p_thresh, torch.zeros_like(p_pred), p_pred)
-
+        # Averge the p_pred for the rest
+        p_pred = p_pred / p_pred.sum(dim=1, keepdim=True)
         # Sample actions using p_pred
         action_sample_list = []
         for i in range(action_pred.shape[0]):

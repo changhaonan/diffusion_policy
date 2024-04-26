@@ -170,9 +170,10 @@ class TrainMBCLowdimWorkspace(BaseWorkspace):
 
                         # logging
                         raw_loss_cpu = raw_loss.item()
+                        bias_factor = self.model.bias_factor
                         tepoch.set_postfix(loss=raw_loss_cpu, refresh=False)
                         train_losses.append(raw_loss_cpu)
-                        step_log = {"train_loss": raw_loss_cpu, "global_step": self.global_step, "epoch": self.epoch, "lr": lr_scheduler.get_last_lr()[0]}
+                        step_log = {"train_loss": raw_loss_cpu, "global_step": self.global_step, "epoch": self.epoch, "lr": lr_scheduler.get_last_lr()[0], "bias_factor": bias_factor}
 
                         is_last_batch = batch_idx == (len(train_dataloader) - 1)
                         if not is_last_batch:
@@ -183,7 +184,7 @@ class TrainMBCLowdimWorkspace(BaseWorkspace):
 
                         if (cfg.training.max_train_steps is not None) and batch_idx >= (cfg.training.max_train_steps - 1):
                             break
-                
+
                 # update training meta information
                 self.model.update_training_meta(self.epoch)
 
