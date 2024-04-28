@@ -61,7 +61,7 @@ def spiral_gradient(theta, a=0, b=0.1):
     return dx_dtheta, dy_dtheta
 
 
-def generate_raw_data(vis: bool = False):
+def generate_raw_data(num_sample, circle_round, vis: bool = False):
     # Parameters
     a_A = 0
     b_A = 0.05
@@ -70,10 +70,7 @@ def generate_raw_data(vis: bool = False):
     a_B = 0.15
     b_B = 0.05
     gamma_B = 1.3
-    reverse_B = False
-
-    num_sample = 400
-    circle_round = 8
+    reverse_B = True
 
     # Generate theta values
     theta_values = np.linspace(2 * circle_round * np.pi, 0, num_sample)
@@ -309,12 +306,15 @@ class DiffusionEstimatorPolicy:
         alpha_t = 1 - beta_t
         alpha_bar_t = np.cumprod(alpha_t)
         sigma_t = (1 - alpha_bar_t[1:]) / (1 - alpha_bar_t[:-1]) * beta_t[1:]
-        h_t = (1 - alpha_bar_t) / alpha_bar_t
+        h_t = np.sqrt((1 - alpha_bar_t) / alpha_bar_t)
         return alpha_t, beta_t, alpha_bar_t, sigma_t, h_t
 
 
 if __name__ == "__main__":
     # Parameters
+    num_sample = 2000
+    circle_round = 16
+
     n_obs_steps = 2
     n_act_steps = 4
     horizon = 8
@@ -324,7 +324,7 @@ if __name__ == "__main__":
     scheduler_type = "linear"
     assert n_obs_steps + n_act_steps <= horizon, "n_obs_steps + n_act_steps should be less than horizon"
     # Generate raw data
-    epsiodes = generate_raw_data(vis=True)
+    epsiodes = generate_raw_data(num_sample=num_sample, circle_round=circle_round, vis=True)
     print("Done!")
 
     # Generate dataset
