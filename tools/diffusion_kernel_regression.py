@@ -43,12 +43,20 @@ def create_indices(episode_ends: np.ndarray, sequence_length: int, episode_mask:
 
 
 ########################################## Dataset part ##########################################
+import os
 import torch
 from torch.utils.data import DataLoader, Dataset
 from typing import Dict, Union
+from diffusers import AutoencoderKL # type: ignore
+from PIL import Image
+from diffusers.image_processor import VaeImageProcessor # type: ignore
+import torch
+import hashlib
+import tqdm
 
 
 class SequenceDataset(Dataset):
+    """Sequential 1D dataset."""
     def __init__(self, episodes, sequence_length: int = 8, pad_before: int = 1, pad_after: int = 7) -> None:
         super().__init__()
         self.episodes = episodes
@@ -104,6 +112,58 @@ class SequenceDataset(Dataset):
             state_list.append(data["state"])
             action_list.append(data["action"])
         return np.stack(state_list), np.stack(action_list)
+    
+
+class ImageDataset(Dataset):
+    """Image dataset."""
+
+    def __init__(self, image_root_dir):
+        super().__init__()
+        self.image_root_dir = image_root_dir
+        self.image_files = os.listdir(image_root_dir)
+        self.image_files = [f for f in self.image_files if f.endswith(".png") or f.endswith(".jpg")]
+        self.image_files = [os.path.join(image_root_dir, f) for f in self.image_files]
+        # Load VAE
+        self.dev = 0
+        self.vae = AutoencoderKL.from_pretrained(
+            "runwayml/stable-diffusion-v1-5", subfolder="vae"
+        )
+        self.vae = self.vae.to(self.dev)
+        self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
+        self.image_processor = VaeImageProcessor(vae_scale_factor=self.vae_scale_factor, do_convert_rgb=True)
+        self.latents = []
+        self.encode_images(use_cache=True)
+
+    def encode_images(self, use_cache: bool = True):
+        cache_file = os.path.join(self.image_root_dir, "latents.pt")
+        if use_cache and os.path.exists(cache_file):
+            self.latents = torch.load(cache_file)
+            return self.latents
+        else:
+            # Encode images
+            self.latents = []
+            for image_file in tqdm.tqdm(self.image_files):
+                img = Image.open(image_file)
+                pixel_values = self.image_processor.numpy_to_pt(self.image_processor.normalize(
+                    self.image_processor.resize(
+                    self.image_processor.pil_to_numpy(img), 255, 255)))
+                latents = self.vae.encode(pixel_values.to(self.dev)).latent_dist.sample()
+                self.latents.append(latents)
+            self.latents = torch.cat(self.latents, dim=0)
+            torch.save(self.latents, cache_file)
+            return self.latents
+        
+    def __len__(self):
+        return len(self.image_files)
+    
+    def __getitem__(self, idx):
+        idx = idx % len(self.image_files)
+        image = Image.open(self.image_files[idx])
+        pixel_values = self.image_processor.numpy_to_pt(self.image_processor.normalize(
+            self.image_processor.resize(
+            self.image_processor.pil_to_numpy(image), 255, 255)))
+        latents = self.latents[idx]
+        return {"image": pixel_values, "latent": latents}
 
 
 ########################################## Algorithm ##########################################
