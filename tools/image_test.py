@@ -5,9 +5,13 @@ from diffusion_kernel_regression import DiffusionKernelRegressionImage, ImageDat
 
 
 if __name__ == "__main__":
+    batch_size = 1
+    check_knn = True
+    scheduler_type = "squaredcos_cap_v2"
     image_path = "/home/harvey/Data/celeba_hq_256"
     dataset = ImageDataset(image_path)
 
-    generator = DiffusionKernelRegressionImage(latents=dataset.latents, vae=dataset.vae, image_processor=dataset.image_processor, knn_max=100, diffusion_steps=100, scheduler_type="linear")
-    image = generator.sample_image(batch_size=1)
-    image.show()
+    generator = DiffusionKernelRegressionImage(latents=dataset.latents, vae=dataset.vae, image_processor=dataset.image_processor, knn_max=100, diffusion_steps=100, scheduler_type=scheduler_type)
+    image_list = generator.sample_image(batch_size=batch_size, check_knn=check_knn)
+    for image in image_list:
+        image.show()

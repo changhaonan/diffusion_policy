@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import numba
 from copy import deepcopy
+import math
 
 
 ########################################## Common ##########################################
@@ -168,11 +169,14 @@ class DiffusionKernelRegression:
 
     def __init__(self, datas, conditions=None, knn_max: int = 32, diffusion_steps: int = 100, scheduler_type: str = "linear") -> None:
         self.datas = datas
-        self.conditions = conditions
         if conditions is not None:
             assert datas.shape[0] == conditions.shape[0], "Samples and conditions should have the same length"
+            self.conditions = conditions
+        else:
+            self.conditions = datas
         self.clip_sample = True
         self.use_robust_kernel = True
+        self.partition_threshold = 0.0
         self.knn_max = knn_max
         self.diffusion_steps = diffusion_steps
 
@@ -196,15 +200,16 @@ class DiffusionKernelRegression:
             local_datas = self.datas
             local_conditions = None
         samples = []
-        for _ in tqdm.tqdm(range(batch_size)):
+        for _iter in tqdm.tqdm(range(batch_size)):
             sample = np.random.randn(1, self.datas.shape[-1])
             for i in tqdm.tqdm(range(self.diffusion_steps - 1, -1, -1), leave=False):
                 data_diff = sample - local_datas
                 condition_diff = condition - local_conditions if condition is not None else np.zeros_like(data_diff)
-                kernel = self._compute_kernel(data_diff, condition_diff, self.h_t[i], robust=self.use_robust_kernel)
+                kernel, partition = self._compute_kernel(data_diff, condition_diff, self.h_t[i], robust=self.use_robust_kernel)
                 # Kernel regression
                 data_pred = np.sum(kernel[:, None] * local_datas, axis=0) / np.sum(kernel)
-                if i > 0:
+                print(f"{_iter}| Current partition: {partition}")
+                if i > 20 and partition > self.partition_threshold:
                     # Update the step
                     sample = (
                         np.sqrt(self.alpha_t[i]) * (1 - self.alpha_bar_t[i - 1]) / (1 - self.alpha_bar_t[i]) * sample
@@ -212,6 +217,8 @@ class DiffusionKernelRegression:
                     )
                     # Add noise
                     sample += self.sigma_t[i - 1] * np.random.randn(1, self.datas.shape[-1])
+                else:
+                    break
                 if self.clip_sample:
                     sample = np.clip(sample, -1, 1)
             samples.append(sample)
@@ -235,13 +242,17 @@ class DiffusionKernelRegression:
         if not robust:
             kernel = np.exp(-(np.linalg.norm(data_diff, axis=1) ** 2 + np.linalg.norm(condition_diff, axis=1) ** 2) / (2 * h_t**2))
             kernel = np.clip(kernel, 1e-8, 1)
+            partition = np.sum(kernel)
         else:
             k_diff = -(np.linalg.norm(data_diff, axis=1) ** 2 + np.linalg.norm(condition_diff, axis=1) ** 2)
+            # FIXME: Adjust by dimenstion
+            # k_diff = k_diff / np.sqrt(data_diff.shape[-1])
+            partition = np.sum(np.exp(k_diff / (2 * h_t**2)))
             min_k_diff = np.max(k_diff)
             k_diff = k_diff - min_k_diff
             kernel = np.exp(k_diff / (2 * h_t**2))
             kernel = np.clip(kernel, 1e-8, 1)
-        return kernel
+        return kernel, partition
 
     def _compute_neighbors(self, condition, knn_max):
         # Compute neighbors based on the state
@@ -256,6 +267,8 @@ class DiffusionKernelRegression:
             beta_t = np.linspace(beta_start, beta_end, self.diffusion_steps)
         elif scheduler_type == "quadratic":
             beta_t = np.linspace(beta_start**0.5, beta_end**0.5, self.diffusion_steps) ** 2
+        elif scheduler_type == "squaredcos_cap_v2":
+            beta_t = self._betas_for_alpha_bar(self.diffusion_steps)
         else:
             raise ValueError("Invalid scheduler type")
         alpha_t = 1 - beta_t
@@ -264,7 +277,29 @@ class DiffusionKernelRegression:
         h_t = np.sqrt((1 - alpha_bar_t) / alpha_bar_t)
         return alpha_t, beta_t, alpha_bar_t, sigma_t, h_t
 
+    def _betas_for_alpha_bar(self, num_diffusion_timesteps, max_beta=0.999, alpha_transform_type="cosine"):
+        if alpha_transform_type == "cosine":
 
+            def alpha_bar_fn(t):
+                return math.cos((t + 0.008) / 1.008 * math.pi / 2) ** 2
+
+        elif alpha_transform_type == "exp":
+
+            def alpha_bar_fn(t):
+                return math.exp(t * -12.0)
+
+        else:
+            raise ValueError(f"Unsupported alpha_tranform_type: {alpha_transform_type}")
+
+        betas = []
+        for i in range(num_diffusion_timesteps):
+            t1 = i / num_diffusion_timesteps
+            t2 = (i + 1) / num_diffusion_timesteps
+            betas.append(min(1 - alpha_bar_fn(t2) / alpha_bar_fn(t1), max_beta))
+        return np.array(betas)
+
+
+########################################## Policy part ##########################################
 class DiffusionKernelRegressionPolicy(DiffusionKernelRegression):
     """Estimated diffusion kernel regression."""
 
@@ -287,6 +322,10 @@ class DiffusionKernelRegressionPolicy(DiffusionKernelRegression):
         return actions
 
 
+########################################## Image part ##########################################
+from PIL import Image
+
+
 class DiffusionKernelRegressionImage(DiffusionKernelRegression):
     """Diffusion kernel image generator."""
 
@@ -298,11 +337,29 @@ class DiffusionKernelRegressionImage(DiffusionKernelRegression):
         super().__init__(datas=latents, knn_max=knn_max, diffusion_steps=diffusion_steps, scheduler_type=scheduler_type)
 
     def sample_image(self, batch_size: int = 4, **kwargs):
-        sample = self.conditional_sampling(batch_size=batch_size)
-        sample = np.reshape(sample, (1,) + self.latent_size)
+        check_knn = kwargs.get("check_knn", False)
+        samples = self.conditional_sampling(batch_size=batch_size)
+        samples = np.reshape(samples, (samples.shape[0],) + self.latent_size)
         # Decode the image
-        scale_factor = 1.0
-        sample = sample / scale_factor
-        decode_pixel_values = self.vae.decode(torch.tensor(sample, dtype=torch.float32).to(self.vae.device), return_dict=False)[0]
-        image = self.image_processor.postprocess(decode_pixel_values.detach(), do_denormalize=[True])[0]
-        return image
+        image_list = []
+        for i in range(samples.shape[0]):
+            sample = samples[i][None, ...]
+            scale_factor = 1.0
+            sample = sample / scale_factor
+            decode_pixel_values = self.vae.decode(torch.tensor(sample, dtype=torch.float32).to(self.vae.device), return_dict=False)[0]
+            image = self.image_processor.postprocess(decode_pixel_values.detach(), do_denormalize=[True])[0]
+            if check_knn:
+                # Need to check the nearest image
+                sample_key = np.reshape(sample, [sample.shape[0], -1])
+                nearest_latents, _ = self._compute_neighbors(sample_key, 1)
+                nearest_latents = np.reshape(nearest_latents, self.latent_size)
+                nearest_latents = nearest_latents / scale_factor
+                nearest_decode_pixel_values = self.vae.decode(torch.tensor(nearest_latents[None, ...], dtype=torch.float32).to(self.vae.device), return_dict=False)[0]
+                nearest_image = self.image_processor.postprocess(nearest_decode_pixel_values.detach(), do_denormalize=[True])[0]
+                # Concatenate the image
+                concat_image = Image.new("RGB", (image.width * 2, image.height))
+                concat_image.paste(image, (0, 0))
+                concat_image.paste(nearest_image, (image.width, 0))
+                image = concat_image
+            image_list.append(image)
+        return image_list
