@@ -47,9 +47,9 @@ import os
 import torch
 from torch.utils.data import DataLoader, Dataset
 from typing import Dict, Union
-from diffusers import AutoencoderKL # type: ignore
+from diffusers import AutoencoderKL
 from PIL import Image
-from diffusers.image_processor import VaeImageProcessor # type: ignore
+from diffusers.image_processor import VaeImageProcessor
 import torch
 import hashlib
 import tqdm
@@ -57,6 +57,7 @@ import tqdm
 
 class SequenceDataset(Dataset):
     """Sequential 1D dataset."""
+
     def __init__(self, episodes, sequence_length: int = 8, pad_before: int = 1, pad_after: int = 7) -> None:
         super().__init__()
         self.episodes = episodes
@@ -112,7 +113,7 @@ class SequenceDataset(Dataset):
             state_list.append(data["state"])
             action_list.append(data["action"])
         return np.stack(state_list), np.stack(action_list)
-    
+
 
 class ImageDataset(Dataset):
     """Image dataset."""
@@ -125,9 +126,7 @@ class ImageDataset(Dataset):
         self.image_files = [os.path.join(image_root_dir, f) for f in self.image_files]
         # Load VAE
         self.dev = 0
-        self.vae = AutoencoderKL.from_pretrained(
-            "runwayml/stable-diffusion-v1-5", subfolder="vae"
-        )
+        self.vae = AutoencoderKL.from_pretrained("runwayml/stable-diffusion-v1-5", subfolder="vae")
         self.vae = self.vae.to(self.dev)
         self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
         self.image_processor = VaeImageProcessor(vae_scale_factor=self.vae_scale_factor, do_convert_rgb=True)
@@ -135,133 +134,122 @@ class ImageDataset(Dataset):
         self.encode_images(use_cache=True)
 
     def encode_images(self, use_cache: bool = True):
-        cache_file = os.path.join(self.image_root_dir, "latents.pt")
+        cache_file = os.path.join(self.image_root_dir, "latents.npy")
         if use_cache and os.path.exists(cache_file):
-            self.latents = torch.load(cache_file)
+            self.latents = np.load(cache_file).squeeze()
+            print("Loaded latents from cache...")
             return self.latents
         else:
             # Encode images
             self.latents = []
             for image_file in tqdm.tqdm(self.image_files):
                 img = Image.open(image_file)
-                pixel_values = self.image_processor.numpy_to_pt(self.image_processor.normalize(
-                    self.image_processor.resize(
-                    self.image_processor.pil_to_numpy(img), 255, 255)))
+                pixel_values = self.image_processor.numpy_to_pt(self.image_processor.normalize(self.image_processor.resize(self.image_processor.pil_to_numpy(img), 255, 255)))
                 latents = self.vae.encode(pixel_values.to(self.dev)).latent_dist.sample()
-                self.latents.append(latents)
-            self.latents = torch.cat(self.latents, dim=0)
-            torch.save(self.latents, cache_file)
+                self.latents.append(latents.detach().cpu().numpy())
+            self.latents = np.stack(self.latents, axis=0)
+            np.save(cache_file, self.latents)
             return self.latents
-        
+
     def __len__(self):
         return len(self.image_files)
-    
+
     def __getitem__(self, idx):
         idx = idx % len(self.image_files)
         image = Image.open(self.image_files[idx])
-        pixel_values = self.image_processor.numpy_to_pt(self.image_processor.normalize(
-            self.image_processor.resize(
-            self.image_processor.pil_to_numpy(image), 255, 255)))
+        pixel_values = self.image_processor.numpy_to_pt(self.image_processor.normalize(self.image_processor.resize(self.image_processor.pil_to_numpy(image), 255, 255)))
         latents = self.latents[idx]
         return {"image": pixel_values, "latent": latents}
 
 
 ########################################## Algorithm ##########################################
 class DiffusionKernelRegression:
-    """Estimated diffusion kernel regression."""
+    """Diffusion kernel regression."""
 
-    def __init__(
-        self,
-        states,
-        actions,
-        state_weights,
-        action_weights,
-        horizon: int = 8,
-        n_obs_steps: int = 2,
-        n_act_steps: int = 4,
-        knn_max: int = 30,
-        diffusion_steps: int = 100,
-        scheduler_type: str = "linear",
-        **kwargs
-    ):
-        self.states = states
-        self.actions = actions
-        self.state_weights = state_weights
-        self.action_weights = action_weights
-        self.horizon = horizon
-        self.n_obs_steps = n_obs_steps
-        self.n_act_steps = n_act_steps
-        self.diffusion_steps = diffusion_steps
+    def __init__(self, datas, conditions=None, knn_max: int = 32, diffusion_steps: int = 100, scheduler_type: str = "linear") -> None:
+        self.datas = datas
+        self.conditions = conditions
+        if conditions is not None:
+            assert datas.shape[0] == conditions.shape[0], "Samples and conditions should have the same length"
+        self.clip_sample = True
+        self.use_robust_kernel = True
         self.knn_max = knn_max
-        self.alpha_t, self.beta_t, self.alpha_bar_t, self.sigma_t, self.h_t = self.get_scheduler(scheduler_type=scheduler_type)
-        self.do_clip = True
-        # Normalization
-        self.stats = {
-            "state": {
-                "max": np.max(np.reshape(self.states, [-1, self.states.shape[-1]]), axis=0),
-                "min": np.min(np.reshape(self.states, [-1, self.states.shape[-1]]), axis=0),
-            },
-            "action": {
-                "max": np.max(np.reshape(self.actions, [-1, self.actions.shape[-1]]), axis=0),
-                "min": np.min(np.reshape(self.actions, [-1, self.actions.shape[-1]]), axis=0),
-            },
-        }
+        self.diffusion_steps = diffusion_steps
 
-    def predict_action(self, obs_dict: Dict[str, torch.Tensor], **kwargs):
-        batch_size = kwargs.get("batch_size", 4)
-        state = obs_dict["state"].cpu().numpy()
-        if state.ndim == 2:
-            state = state[-1, :]
-        local_states, local_actions = self.compute_neighbors(state, self.knn_max)
-        # Normalize the states and actions
-        local_states = ((local_states - self.stats["state"]["min"]) / (self.stats["state"]["max"] - self.stats["state"]["min"])) * 2 - 1
-        local_actions = ((local_actions - self.stats["action"]["min"]) / (self.stats["action"]["max"] - self.stats["action"]["min"])) * 2 - 1
-        state = ((state - self.stats["state"]["min"]) / (self.stats["state"]["max"] - self.stats["state"]["min"])) * 2 - 1
-        # Apply the weights
-        weighted_local_states = local_states * self.state_weights[None, :]
-        weighted_local_actions = (local_actions * self.action_weights[None, None, :]).reshape(-1, self.n_act_steps * self.actions.shape[-1])
-        weighted_state = (state * self.state_weights).reshape(1, -1)
+        self.stats = {}
+        self._compute_stats(self.datas, "datas")
+        self.datas = self._normalize(self.datas, self.stats["datas"])
+        if conditions is not None:
+            self._compute_stats(self.conditions, "conditions")
+            self.conditions = self._normalize(self.conditions, self.stats["conditions"])
+        self.alpha_t, self.beta_t, self.alpha_bar_t, self.sigma_t, self.h_t = self._get_scheduler(scheduler_type=scheduler_type)
 
-        action_samples = []
-        for _ in range(batch_size):
-            action_sample = np.random.randn(1, self.n_act_steps * self.actions.shape[-1])
-            for i in range(self.diffusion_steps - 1, -1, -1):
-                # Compute the gradient of the state
-                state_diff = weighted_state - weighted_local_states
-                action_diff = action_sample - weighted_local_actions
-                # Compute the diffusion kernel
-                kernel = np.exp(-(np.linalg.norm(state_diff, axis=1) ** 2 + np.linalg.norm(action_diff, axis=1) ** 2) / (2 * self.h_t[i] ** 2))
-                kernel = np.clip(kernel, 1e-8, 1)
-                # FIXME: When sigma is too small, the kernel will be around 0, which will cause nan in the action predictions
-                # Compute the action prediction: x_0 = sum_i (k_i * y_i) / sum_i (k_i)
-                action_pred = np.sum(kernel[:, None] * weighted_local_actions, axis=0) / np.sum(kernel)
+    def conditional_sampling(self, condition=None, batch_size=4, **kwargs):
+        # Normalize the condition
+        if condition is not None:
+            if isinstance(condition, torch.Tensor):
+                condition = condition.cpu().numpy()
+            condition = np.reshape(condition, [-1, self.conditions.shape[-1]])
+            condition = self._normalize(condition, self.stats["conditions"])
+            local_conditions, local_datas = self._compute_neighbors(condition, self.knn_max)
+        else:
+            local_datas = self.datas
+            local_conditions = None
+        samples = []
+        for _ in tqdm.tqdm(range(batch_size)):
+            sample = np.random.randn(1, self.datas.shape[-1])
+            for i in tqdm.tqdm(range(self.diffusion_steps - 1, -1, -1), leave=False):
+                data_diff = sample - local_datas
+                condition_diff = condition - local_conditions if condition is not None else np.zeros_like(data_diff)
+                kernel = self._compute_kernel(data_diff, condition_diff, self.h_t[i], robust=self.use_robust_kernel)
+                # Kernel regression
+                data_pred = np.sum(kernel[:, None] * local_datas, axis=0) / np.sum(kernel)
                 if i > 0:
                     # Update the step
-                    action_sample = (
-                        np.sqrt(self.alpha_t[i]) * (1 - self.alpha_bar_t[i - 1]) / (1 - self.alpha_bar_t[i]) * action_sample
-                        + np.sqrt(self.alpha_bar_t[i - 1]) * self.beta_t[i] / (1 - self.alpha_bar_t[i]) * action_pred
+                    sample = (
+                        np.sqrt(self.alpha_t[i]) * (1 - self.alpha_bar_t[i - 1]) / (1 - self.alpha_bar_t[i]) * sample
+                        + np.sqrt(self.alpha_bar_t[i - 1]) * self.beta_t[i] / (1 - self.alpha_bar_t[i]) * data_pred
                     )
                     # Add noise
-                    action_sample += self.sigma_t[i - 1] * np.random.randn(1, self.n_act_steps * self.actions.shape[-1])
-                if self.do_clip:
-                    action_sample = np.clip(action_sample, -1, 1)
-            # Unnormalize the action
-            action_sample = action_sample.reshape(self.n_act_steps, self.actions.shape[-1])
-            action_sample = (action_sample + 1) / 2  # Normalize to [0, 1]
-            action_sample = action_sample * (self.stats["action"]["max"] - self.stats["action"]["min"]) + self.stats["action"]["min"]
-            action_samples.append(action_sample)
-        return np.stack(action_samples, axis=0)
+                    sample += self.sigma_t[i - 1] * np.random.randn(1, self.datas.shape[-1])
+                if self.clip_sample:
+                    sample = np.clip(sample, -1, 1)
+            samples.append(sample)
+        samples = np.stack(samples, axis=0)
+        # Unnormalize the datas
+        samples = self._unnormalize(samples, self.stats["datas"])
+        return samples
 
-    def compute_neighbors(self, state, knn_max):
+    def _compute_stats(self, data, key):
+        self.stats[key] = {}
+        self.stats[key]["max"] = np.max(data, axis=0)
+        self.stats[key]["min"] = np.min(data, axis=0)
+
+    def _normalize(self, data, stats):
+        return ((data - stats["min"]) / (stats["max"] - stats["min"])) * 2 - 1
+
+    def _unnormalize(self, data, stats):
+        return ((data + 1) / 2) * (stats["max"] - stats["min"]) + stats["min"]
+
+    def _compute_kernel(self, data_diff, condition_diff, h_t, robust=True):
+        if not robust:
+            kernel = np.exp(-(np.linalg.norm(data_diff, axis=1) ** 2 + np.linalg.norm(condition_diff, axis=1) ** 2) / (2 * h_t**2))
+            kernel = np.clip(kernel, 1e-8, 1)
+        else:
+            k_diff = -(np.linalg.norm(data_diff, axis=1) ** 2 + np.linalg.norm(condition_diff, axis=1) ** 2)
+            min_k_diff = np.max(k_diff)
+            k_diff = k_diff - min_k_diff
+            kernel = np.exp(k_diff / (2 * h_t**2))
+            kernel = np.clip(kernel, 1e-8, 1)
+        return kernel
+
+    def _compute_neighbors(self, condition, knn_max):
         # Compute neighbors based on the state
-        states_key = self.states[:, -1, :]
-        weighted_states_key = states_key * self.state_weights[None, :]
-        weighted_state = state * self.state_weights
-        dist = np.linalg.norm(weighted_states_key - weighted_state[None, :], axis=1)
-        idx = np.argsort(dist)[:knn_max]
-        return self.states[idx, -1, :], self.actions[idx]
+        dist = np.linalg.norm(self.conditions - condition[None, :], axis=-1).squeeze()
+        idx = np.argsort(dist)[:knn_max].squeeze()
+        return self.conditions[idx, :], self.datas[idx]
 
-    def get_scheduler(self, beta_start=0.0001, beta_end=0.02, scheduler_type="linear"):
+    def _get_scheduler(self, beta_start=0.0001, beta_end=0.02, scheduler_type="linear"):
         # Get the scheduler for the diffusion steps; alpha_t, beta_t
         t = np.arange(self.diffusion_steps)
         if scheduler_type == "linear":
@@ -275,3 +263,46 @@ class DiffusionKernelRegression:
         sigma_t = (1 - alpha_bar_t[1:]) / (1 - alpha_bar_t[:-1]) * beta_t[1:]
         h_t = np.sqrt((1 - alpha_bar_t) / alpha_bar_t)
         return alpha_t, beta_t, alpha_bar_t, sigma_t, h_t
+
+
+class DiffusionKernelRegressionPolicy(DiffusionKernelRegression):
+    """Estimated diffusion kernel regression."""
+
+    def __init__(self, states, actions, horizon: int = 8, n_obs_steps: int = 2, n_act_steps: int = 4, knn_max: int = 30, diffusion_steps: int = 100, scheduler_type: str = "linear", **kwargs):
+        # Reshape the states and actions
+        states = np.reshape(states, [states.shape[0], -1])
+        actions = np.reshape(actions, [actions.shape[0], -1])
+        super().__init__(datas=actions, conditions=states, knn_max=knn_max, diffusion_steps=diffusion_steps, scheduler_type=scheduler_type)
+        self.horizon = horizon
+        self.n_obs_steps = n_obs_steps
+        self.n_act_steps = n_act_steps
+
+    def predict_action(self, obs_dict: Dict[str, torch.Tensor], **kwargs):
+        batch_size = kwargs.get("batch_size", 4)
+        obs = obs_dict["state"].cpu().numpy()
+        obs = np.reshape(obs, [obs.shape[0], -1])
+        actions = self.conditional_sampling(condition=obs, batch_size=batch_size)
+        # Reshape the actions
+        actions = np.reshape(actions, [actions.shape[0], self.n_act_steps, -1])
+        return actions
+
+
+class DiffusionKernelRegressionImage(DiffusionKernelRegression):
+    """Diffusion kernel image generator."""
+
+    def __init__(self, latents, vae: AutoencoderKL, image_processor: VaeImageProcessor, knn_max: int = 100, diffusion_steps: int = 100, scheduler_type: str = "linear", **kwargs):
+        self.vae = vae
+        self.image_processor = image_processor
+        self.latent_size = latents.shape[1:]
+        latents = latents.reshape([latents.shape[0], -1])
+        super().__init__(datas=latents, knn_max=knn_max, diffusion_steps=diffusion_steps, scheduler_type=scheduler_type)
+
+    def sample_image(self, batch_size: int = 4, **kwargs):
+        sample = self.conditional_sampling(batch_size=batch_size)
+        sample = np.reshape(sample, (1,) + self.latent_size)
+        # Decode the image
+        scale_factor = 1.0
+        sample = sample / scale_factor
+        decode_pixel_values = self.vae.decode(torch.tensor(sample, dtype=torch.float32).to(self.vae.device), return_dict=False)[0]
+        image = self.image_processor.postprocess(decode_pixel_values.detach(), do_denormalize=[True])[0]
+        return image

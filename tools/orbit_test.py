@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
-from diffusion_kernel_regression import DiffusionKernelRegression, SequenceDataset
+from diffusion_kernel_regression import DiffusionKernelRegressionPolicy, SequenceDataset
 
 
 # Define the spiral function in polar coordinates (r = a + b*theta)
@@ -98,7 +98,7 @@ if __name__ == "__main__":
     circle_round = 16
     reverse_B = False
 
-    n_obs_steps = 2
+    n_obs_steps = 1
     n_act_steps = 4
     horizon = 8
     diffusion_steps = 100
@@ -117,10 +117,8 @@ if __name__ == "__main__":
     full_state, full_action = dataset.all_state_actions()
     state = full_state[:, :n_obs_steps, :]
     action = full_action[:, n_obs_steps - 1 : n_obs_steps - 1 + n_act_steps, :]
-    state_weights = np.ones(state.shape[-1])
-    action_weights = np.ones(action.shape[-1])
-    policy = DiffusionKernelRegression(
-        state, action, state_weights, action_weights, horizon=horizon, n_obs_steps=n_obs_steps, n_act_steps=n_act_steps, knn_max=knn_max, diffusion_steps=diffusion_steps, scheduler_type=scheduler_type
+    policy = DiffusionKernelRegressionPolicy(
+        states=state, actions=action, horizon=horizon, n_obs_steps=n_obs_steps, n_act_steps=n_act_steps, knn_max=knn_max, diffusion_steps=diffusion_steps, scheduler_type=scheduler_type
     )
 
     # # Test dataset
@@ -130,7 +128,7 @@ if __name__ == "__main__":
     #     draw_state_action(state[idx, :], action[idx, :], epsiodes)
 
     # Test policy
-    for i in range(10):
+    for i in range(100):
         idx = np.random.randint(len(dataset))
         data = dataset[idx]
         action_pred = policy.predict_action({"state": torch.tensor(data["state"][:n_obs_steps, :], dtype=torch.float32)}, batch_size=batch_size)
