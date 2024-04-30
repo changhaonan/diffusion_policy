@@ -46,10 +46,10 @@ if __name__ == "__main__":
     dataset = dino_dataset(data_path)
     data = dataset.tensors[0].cpu().numpy()
 
-    batch_size = 1
-    diffusion_steps = 1000
-    # scheduler_type = "squaredcos_cap_v2"
-    scheduler_type = "linear"
+    batch_size = 8
+    diffusion_steps = 100
+    scheduler_type = "squaredcos_cap_v2"
+    # scheduler_type = "linear"
 
     dkr = DiffusionKernelRegression(datas=data, diffusion_steps=diffusion_steps, scheduler_type=scheduler_type)
     for i in range(10):

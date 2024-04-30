@@ -7,7 +7,7 @@ from diffusion_kernel_regression import DiffusionKernelRegressionImage, ImageDat
 if __name__ == "__main__":
     batch_size = 1
     check_knn = True
-    diffusion_steps = 1000
+    diffusion_steps = 100
     scheduler_type = "squaredcos_cap_v2"
     image_path = "/home/harvey/Data/celeba_hq_256"
     dataset = ImageDataset(image_path)

@@ -175,8 +175,8 @@ class DiffusionKernelRegression:
         else:
             self.conditions = datas
         self.clip_sample = True
-        self.use_robust_kernel = False
-        self.partition_threshold = 0.01
+        self.use_robust_kernel = True
+        self.partition_threshold = 0.00
         self.knn_max = knn_max
         self.diffusion_steps = diffusion_steps
 
@@ -213,14 +213,14 @@ class DiffusionKernelRegression:
                 # c = 0.1 / partition
                 # data_pred = np.sum(kernel[:, None] * local_datas, axis=0) / (np.sum(kernel) + c)
                 print(f"{i}| Current partition: {partition}")
-                if i > 0 and partition > self.partition_threshold:
+                if i > 0:
                     # Update the step
                     sample = (
                         np.sqrt(self.alpha_t[i]) * (1 - self.alpha_bar_t[i - 1]) / (1 - self.alpha_bar_t[i]) * sample
                         + np.sqrt(self.alpha_bar_t[i - 1]) * self.beta_t[i] / (1 - self.alpha_bar_t[i]) * data_pred
                     )
                     # Add noise
-                    sample += self.sigma_t[i - 1] * np.random.randn(1, self.datas.shape[-1])
+                    sample += np.sqrt(self.sigma_t[i - 1]) * np.random.randn(1, self.datas.shape[-1])
                 else:
                     break
                 if self.clip_sample:
@@ -265,6 +265,9 @@ class DiffusionKernelRegression:
             k_diff = k_diff - min_k_diff
             kernel = np.exp(k_diff / (2 * h_t**2))
             kernel = np.clip(kernel, 1e-8, 1)
+            # max_idx = np.argmax(kernel)
+            # kernel[:] = 0
+            # kernel[max_idx] = 1
         return kernel, partition
 
     def _compute_neighbors(self, condition, knn_max):
