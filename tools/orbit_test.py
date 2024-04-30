@@ -36,7 +36,7 @@ def generate_raw_data(num_sample, circle_round, reverse_B: bool = False, vis: bo
 
     # Compute spiral coordinates & gradients
     x_values_A, y_values_A = spiral(theta=theta_values, gamma=gamma_A, a=a_A, b=b_A)
-    gradients_A = np.zeros((num_sample, 2))
+    gradients_A = np.zeros((theta_values.shape[0], 2))
     gradients_A[:-1, 0] = x_values_A[1:] - x_values_A[:-1]
     gradients_A[:-1, 1] = y_values_A[1:] - y_values_A[:-1]
 
@@ -45,9 +45,20 @@ def generate_raw_data(num_sample, circle_round, reverse_B: bool = False, vis: bo
     if reverse_B:
         x_values_B = x_values_B[::-1]
         y_values_B = y_values_B[::-1]
-    gradients_B = np.zeros((num_sample, 2))
+    gradients_B = np.zeros((theta_values.shape[0], 2))
     gradients_B[:-1, 0] = x_values_B[1:] - x_values_B[:-1]
     gradients_B[:-1, 1] = y_values_B[1:] - y_values_B[:-1]
+
+    # Filter out when theta is around np.pi / 2
+    mask = np.logical_and(theta_values > 8 * np.pi, theta_values < 8.3 * np.pi)
+    masked_state = np.stack([x_values_A[mask], y_values_A[mask]], axis=1)
+    x_values_A[mask] = np.ones_like(x_values_A[mask])
+    y_values_A[mask] = np.ones_like(y_values_A[mask])
+    gradients_A[mask] = np.zeros_like(gradients_A[mask])
+    x_values_B[mask] = np.ones_like(x_values_B[mask])
+    y_values_B[mask] = np.ones_like(y_values_B[mask])
+    gradients_B[mask] = np.zeros_like(gradients_B[mask])
+
     ax = None
     if vis:
         # Plot the spiral and its gradient field
@@ -63,10 +74,10 @@ def generate_raw_data(num_sample, circle_round, reverse_B: bool = False, vis: bo
     episodes = []
     episodes.append({"state": np.stack([x_values_A, y_values_A], axis=1), "action": gradients_A, "label": 0})
     episodes.append({"state": np.stack([x_values_B, y_values_B], axis=1), "action": gradients_B, "label": 1})
-    return episodes
+    return episodes, masked_state
 
 
-def draw_state_action(state, actions, epsiodes=None):
+def draw_state_action(state, actions, epsiodes=None, save_path=None):
     fig, ax = plt.subplots()
     if epsiodes is not None:
         for _i, episode in enumerate(epsiodes):
@@ -89,25 +100,32 @@ def draw_state_action(state, actions, epsiodes=None):
     ax.axis("equal")
     plt.title("State and Action")
     plt.legend()
-    plt.show()
+    if save_path is not None:
+        plt.savefig(save_path)
+    else:
+        plt.show()
 
 
 if __name__ == "__main__":
+    import os
+    oputput_dir = "/home/harvey/Project/diffusion_policy/output"
+    os.makedirs(oputput_dir, exist_ok=True)
+
     # Parameters
-    num_sample = 2000
+    num_sample = 1000
     circle_round = 16
     reverse_B = False
 
     n_obs_steps = 1
-    n_act_steps = 4
+    n_act_steps = 7
     horizon = 8
     diffusion_steps = 100
     knn_max = 100
     batch_size = 8
-    scheduler_type = "linear"
+    scheduler_type = "squaredcos_cap_v2"
     assert n_obs_steps + n_act_steps <= horizon, "n_obs_steps + n_act_steps should be less than horizon"
     # Generate raw data
-    epsiodes = generate_raw_data(num_sample=num_sample, circle_round=circle_round, reverse_B=reverse_B, vis=True)
+    epsiodes, masked_state = generate_raw_data(num_sample=num_sample, circle_round=circle_round, reverse_B=reverse_B, vis=False)
     print("Done!")
 
     # Generate dataset
@@ -128,8 +146,8 @@ if __name__ == "__main__":
     #     draw_state_action(state[idx, :], action[idx, :], epsiodes)
 
     # Test policy
-    for i in range(100):
-        idx = np.random.randint(len(dataset))
-        data = dataset[idx]
-        action_pred = policy.predict_action({"state": torch.tensor(data["state"][:n_obs_steps, :], dtype=torch.float32)}, batch_size=batch_size)
-        draw_state_action(data["state"][:n_obs_steps, :], action_pred, epsiodes)
+    for i in range(10):
+        idx = np.random.randint(masked_state.shape[0])
+        state = masked_state[idx].reshape(1, -1)
+        action_pred = policy.predict_action({"state": torch.tensor(state[:n_obs_steps, :], dtype=torch.float32)}, batch_size=batch_size)
+        draw_state_action(state[:n_obs_steps, :], action_pred, epsiodes, save_path=os.path.join(oputput_dir, f"test_{i}.png"))

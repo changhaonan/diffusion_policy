@@ -200,7 +200,7 @@ class DiffusionKernelRegression:
             local_datas = self.datas
             local_conditions = None
         samples = []
-        for _iter in tqdm.tqdm(range(batch_size)):
+        for _ in tqdm.tqdm(range(batch_size)):
             sample = np.random.randn(1, self.datas.shape[-1])
             for i in tqdm.tqdm(range(self.diffusion_steps - 1, -1, -1), leave=False):
                 data_diff = sample - local_datas
@@ -208,7 +208,7 @@ class DiffusionKernelRegression:
                 kernel, partition = self._compute_kernel(data_diff, condition_diff, self.h_t[i], robust=self.use_robust_kernel)
                 # Kernel regression
                 data_pred = np.sum(kernel[:, None] * local_datas, axis=0) / np.sum(kernel)
-                print(f"{_iter}| Current partition: {partition}")
+                print(f"{i}| Current partition: {partition}")
                 if i > 0 and partition > self.partition_threshold:
                     # Update the step
                     sample = (
