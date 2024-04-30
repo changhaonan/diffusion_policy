@@ -209,7 +209,7 @@ class DiffusionKernelRegression:
                 # Kernel regression
                 data_pred = np.sum(kernel[:, None] * local_datas, axis=0) / np.sum(kernel)
                 print(f"{_iter}| Current partition: {partition}")
-                if i > 20 and partition > self.partition_threshold:
+                if i > 0 and partition > self.partition_threshold:
                     # Update the step
                     sample = (
                         np.sqrt(self.alpha_t[i]) * (1 - self.alpha_bar_t[i - 1]) / (1 - self.alpha_bar_t[i]) * sample
