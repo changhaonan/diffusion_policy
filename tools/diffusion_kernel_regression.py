@@ -175,8 +175,8 @@ class DiffusionKernelRegression:
         else:
             self.conditions = datas
         self.clip_sample = True
-        self.use_robust_kernel = True
-        self.partition_threshold = 0.0
+        self.use_robust_kernel = False
+        self.partition_threshold = 0.01
         self.knn_max = knn_max
         self.diffusion_steps = diffusion_steps
 
@@ -188,7 +188,7 @@ class DiffusionKernelRegression:
             self.conditions = self._normalize(self.conditions, self.stats["conditions"])
         self.alpha_t, self.beta_t, self.alpha_bar_t, self.sigma_t, self.h_t = self._get_scheduler(scheduler_type=scheduler_type)
 
-    def conditional_sampling(self, condition=None, batch_size=4, **kwargs):
+    def conditional_sampling(self, condition=None, batch_size=4, return_trajectory=False):
         # Normalize the condition
         if condition is not None:
             if isinstance(condition, torch.Tensor):
@@ -200,14 +200,18 @@ class DiffusionKernelRegression:
             local_datas = self.datas
             local_conditions = None
         samples = []
+        trajectories = []
         for _ in tqdm.tqdm(range(batch_size)):
             sample = np.random.randn(1, self.datas.shape[-1])
+            trajectory = [sample]
             for i in tqdm.tqdm(range(self.diffusion_steps - 1, -1, -1), leave=False):
                 data_diff = sample - local_datas
                 condition_diff = condition - local_conditions if condition is not None else np.zeros_like(data_diff)
                 kernel, partition = self._compute_kernel(data_diff, condition_diff, self.h_t[i], robust=self.use_robust_kernel)
                 # Kernel regression
                 data_pred = np.sum(kernel[:, None] * local_datas, axis=0) / np.sum(kernel)
+                # c = 0.1 / partition
+                # data_pred = np.sum(kernel[:, None] * local_datas, axis=0) / (np.sum(kernel) + c)
                 print(f"{i}| Current partition: {partition}")
                 if i > 0 and partition > self.partition_threshold:
                     # Update the step
@@ -221,11 +225,20 @@ class DiffusionKernelRegression:
                     break
                 if self.clip_sample:
                     sample = np.clip(sample, -1, 1)
+                if return_trajectory:
+                    trajectory.append(sample)
             samples.append(sample)
+            if return_trajectory:
+                trajectories.append(trajectory)
         samples = np.stack(samples, axis=0)
         # Unnormalize the datas
         samples = self._unnormalize(samples, self.stats["datas"])
-        return samples
+        if return_trajectory:
+            trajectories = np.stack(trajectories, axis=0)
+            trajectories = self._unnormalize(trajectories, self.stats["datas"])
+            return samples, trajectories
+        else:
+            return samples
 
     def _compute_stats(self, data, key):
         self.stats[key] = {}
