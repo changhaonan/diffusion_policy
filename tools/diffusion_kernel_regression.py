@@ -201,7 +201,7 @@ class DiffusionKernelRegression:
             local_conditions = None
         samples = []
         trajectories = []
-        for _ in tqdm.tqdm(range(batch_size)):
+        for _ in tqdm.tqdm(range(batch_size), leave=False):
             sample = np.random.randn(1, self.datas.shape[-1])
             trajectory = [sample]
             for i in tqdm.tqdm(range(self.diffusion_steps - 1, -1, -1), leave=False):
@@ -212,7 +212,7 @@ class DiffusionKernelRegression:
                 data_pred = np.sum(kernel[:, None] * local_datas, axis=0) / np.sum(kernel)
                 # c = 0.1 / partition
                 # data_pred = np.sum(kernel[:, None] * local_datas, axis=0) / (np.sum(kernel) + c)
-                print(f"{i}| Current partition: {partition}")
+                # print(f"{i}| Current partition: {partition}")
                 if i > 0:
                     # Update the step
                     sample = (

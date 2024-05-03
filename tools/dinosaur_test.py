@@ -41,8 +41,10 @@ def draw_data_and_trajectory(data, trajectory):
 
 
 if __name__ == "__main__":
+    import os
     # Params
-    data_path = "/home/harvey/Project/diffusion_policy/data/kernel_regression/DatasaurusDozen.tsv"
+    root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    data_path = f"{root_dir}/data/DatasaurusDozen.tsv"
     dataset = dino_dataset(data_path)
     data = dataset.tensors[0].cpu().numpy()
 

@@ -1,4 +1,5 @@
 import torch
+import tqdm
 import numpy as np
 import matplotlib.pyplot as plt
 from diffusion_kernel_regression import DiffusionKernelRegressionPolicy, SequenceDataset
@@ -49,15 +50,19 @@ def generate_raw_data(num_sample, circle_round, reverse_B: bool = False, vis: bo
     gradients_B[:-1, 0] = x_values_B[1:] - x_values_B[:-1]
     gradients_B[:-1, 1] = y_values_B[1:] - y_values_B[:-1]
 
-    # Filter out when theta is around np.pi / 2
-    mask = np.logical_and(theta_values > 8 * np.pi, theta_values < 8.3 * np.pi)
-    masked_state = np.stack([x_values_A[mask], y_values_A[mask]], axis=1)
-    x_values_A[mask] = np.ones_like(x_values_A[mask])
-    y_values_A[mask] = np.ones_like(y_values_A[mask])
-    gradients_A[mask] = np.zeros_like(gradients_A[mask])
-    x_values_B[mask] = np.ones_like(x_values_B[mask])
-    y_values_B[mask] = np.ones_like(y_values_B[mask])
-    gradients_B[mask] = np.zeros_like(gradients_B[mask])
+    use_mask = False
+    if use_mask:
+        # Filter out when theta is around np.pi / 2
+        mask = np.logical_and(theta_values > 8 * np.pi, theta_values < 8.3 * np.pi)
+        masked_state = np.stack([x_values_A[mask], y_values_A[mask]], axis=1)
+        x_values_A[mask] = np.ones_like(x_values_A[mask])
+        y_values_A[mask] = np.ones_like(y_values_A[mask])
+        gradients_A[mask] = np.zeros_like(gradients_A[mask])
+        x_values_B[mask] = np.ones_like(x_values_B[mask])
+        y_values_B[mask] = np.ones_like(y_values_B[mask])
+        gradients_B[mask] = np.zeros_like(gradients_B[mask])
+    else:
+        masked_state = np.stack([x_values_A, y_values_A], axis=1)
 
     ax = None
     if vis:
@@ -96,7 +101,7 @@ def draw_state_action(state, actions, epsiodes=None, save_path=None):
         pred_state = state[-1] + cum_action
         pred_state = np.concatenate([state[-1][None, :], pred_state], axis=0)
         # pred_state = state[1] + cum_action[1:]
-        ax.plot(pred_state[:, 0], pred_state[:, 1], c="green", marker="x", markersize=3)
+        ax.plot(pred_state[:, 0], pred_state[:, 1], c="green", marker="x", markersize=2)
     ax.axis("equal")
     plt.title("State and Action")
     plt.legend()
@@ -106,9 +111,19 @@ def draw_state_action(state, actions, epsiodes=None, save_path=None):
         plt.show()
 
 
+def env_step(states, actions, n_act_steps):
+    # Step environment
+    cur_state = states[-1]
+    cum_action = np.cumsum(actions[:n_act_steps, ...], axis=0)
+    next_state = cur_state[None, ...] + cum_action
+    next_state = np.concatenate([cur_state[None, :], next_state], axis=0)
+    return next_state
+
+
 if __name__ == "__main__":
     import os
-    oputput_dir = "/home/harvey/Project/diffusion_policy/output"
+    root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    oputput_dir = f"{root_dir}/output"
     os.makedirs(oputput_dir, exist_ok=True)
 
     # Parameters
@@ -117,10 +132,10 @@ if __name__ == "__main__":
     reverse_B = False
 
     n_obs_steps = 1
-    n_act_steps = 7
+    n_act_steps = 4
     horizon = 8
     diffusion_steps = 100
-    knn_max = 100
+    knn_max = 10
     batch_size = 8
     scheduler_type = "squaredcos_cap_v2"
     assert n_obs_steps + n_act_steps <= horizon, "n_obs_steps + n_act_steps should be less than horizon"
@@ -145,9 +160,24 @@ if __name__ == "__main__":
     #     # print(data["state"].shape, data["action"].shape)
     #     draw_state_action(state[idx, :], action[idx, :], epsiodes)
 
-    # Test policy
-    for i in range(10):
+    # # Static test
+    # for i in range(10):
+    #     idx = np.random.randint(masked_state.shape[0])
+    #     # state = masked_state[idx].reshape(1, -1)
+    #     sample_state = state[idx, ...]
+    #     action_pred = policy.predict_action({"state": torch.tensor(sample_state[:n_obs_steps, :], dtype=torch.float32)}, batch_size=batch_size)
+    #     draw_state_action(sample_state[:n_obs_steps, :], action_pred, epsiodes, save_path=os.path.join(oputput_dir, f"test_{i}.png"))
+
+    # Dynamic test
+    for i in range(1):
         idx = np.random.randint(masked_state.shape[0])
-        state = masked_state[idx].reshape(1, -1)
-        action_pred = policy.predict_action({"state": torch.tensor(state[:n_obs_steps, :], dtype=torch.float32)}, batch_size=batch_size)
-        draw_state_action(state[:n_obs_steps, :], action_pred, epsiodes, save_path=os.path.join(oputput_dir, f"test_{i}.png"))
+        sample_state = state[idx, ...]
+        for j in tqdm.tqdm(range(200)):
+            action_pred = policy.predict_action({"state": torch.tensor(sample_state[-n_obs_steps:, :], dtype=torch.float32)}, batch_size=batch_size)
+            draw_state_action(sample_state[:n_obs_steps, :], action_pred, epsiodes, save_path=os.path.join(oputput_dir, f"dyn_test_{i}_{j}.png"))
+            # randomly select an action
+            action_idx = np.random.randint(action_pred.shape[0])
+            action = action_pred[action_idx]
+            # Step environment
+            next_state = env_step(sample_state[:n_obs_steps, :], action, n_act_steps)
+            sample_state = next_state[-n_obs_steps:, :]
