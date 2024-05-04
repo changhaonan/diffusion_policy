@@ -49,7 +49,6 @@ class PushTStateDataset(BaseLowdimDataset):
     def _sample_to_data(self, sample):
         state = sample[self.state_key]
         obs = np.array(state)
-
         data = {
             "obs": obs,  # T, D_o
             "action": sample[self.action_key],  # T, D_a

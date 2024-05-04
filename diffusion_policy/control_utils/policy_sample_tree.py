@@ -1,12 +1,12 @@
 """Policy Sample Tree."""
-from diffusion_kernel_regression import DKRStateActionPolicy
+from diffusion_policy.policy.base_sa_policy import BaseSAPolicy
 from collections import namedtuple
 
 SANode = namedtuple("SANode", ["state", "action", "depth", "value", "children"])
 
 class PolicySampleTree:
 
-    def __init__(self, policy: DKRStateActionPolicy, k_sample: int, max_depth: int):
+    def __init__(self, policy: BaseSAPolicy, k_sample: int, max_depth: int):
         self.policy = policy
         self.k_sample = k_sample
         self.max_depth = max_depth
@@ -34,7 +34,8 @@ class PolicySampleTree:
         # Expand a node in the tree
         node = self.nodes[node_id]
         state = node.state
-        pred_states, pred_actions = self.policy.predict_state_action({"state": state}, batch_size=self.k_sample)
+        pred = self.policy.predict_state_action({"state": state}, batch_size=self.k_sample)
+        pred_states, pred_actions = pred["state"], pred["action"]
         # Overwrite the action of the node
         self.nodes[node_id] = SANode(state=node.state, action=pred_actions[:, :self.n_act_steps, :], depth=node.depth, value=None, children=node.children)
         for i in range(self.k_sample):

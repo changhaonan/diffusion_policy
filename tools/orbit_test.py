@@ -3,7 +3,7 @@ import tqdm
 import numpy as np
 import matplotlib.pyplot as plt
 from diffusion_kernel_regression import DiffusionKernelRegressionPolicy, SequenceDataset, DKRStateActionPolicy
-from policy_sample_tree import PolicySampleTree
+from diffusion_policy.control_utils.policy_sample_tree import PolicySampleTree
 
 
 # Define the spiral function in polar coordinates (r = a + b*theta)

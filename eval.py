@@ -18,15 +18,27 @@ import dill
 import wandb
 import json
 from diffusion_policy.workspace.base_workspace import BaseWorkspace
-from diffusion_policy.control_utils.frequence_policy import FreqActionFieldPolicy
+from diffusion_policy.control_utils.knn_policy import KNNPolicy, KNNSAPolicy
+from diffusion_policy.control_utils.policy_sample_tree import PolicySampleTree
+from diffusion_policy.env.pusht.pusht_env import PushTEnv
+
+############################## Utils ##############################
+
+def test_policy_sample_tree(policy_sample_tree, n_samples=10):
+    # Init env
+    env = PushTEnv()
+    env.seed(0)
+    obs = env.reset()
+    
+    pass
 
 
 @click.command()
 @click.option("-c", "--checkpoint", required=True)
 @click.option("-o", "--output_dir", required=True)
 @click.option("-d", "--device", default="cuda:0")
-@click.option("-f", "--freq", default=False, help="Use frequence action field policy.")
-def main(checkpoint, output_dir, device, freq):
+@click.option("-a", "--algorithm", default="knn", help="diffusion, knn, knn_sa")
+def main(checkpoint, output_dir, device, algorithm):
     if os.path.exists(output_dir):
         click.confirm(f"Output path {output_dir} already exists! Overwrite?", abort=True)
     pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)
@@ -41,7 +53,7 @@ def main(checkpoint, output_dir, device, freq):
     workspace: BaseWorkspace
     workspace.load_payload(payload, exclude_keys=None, include_keys=None)
 
-    if not freq:
+    if algorithm == "diffusion":
         # get policy from workspace
         policy = workspace.model
         if cfg.training.use_ema:
@@ -50,9 +62,14 @@ def main(checkpoint, output_dir, device, freq):
         device = torch.device(device)
         policy.to(device)
         policy.eval()
-    else:
+    elif algorithm == "knn":
         knn = 2
-        policy = FreqActionFieldPolicy(zarr_path="/home/harvey/Project/diffusion_policy/data/kowndi_pusht_demo_v2_repulse.zarr", horizon=16, pad_before=1, pad_after=7, knn=knn)
+        policy = KNNPolicy(zarr_path="/home/harvey/Project/diffusion_policy/data/kowndi_pusht_demo_v2_repulse.zarr", horizon=16, pad_before=1, pad_after=7, knn=knn)
+    elif algorithm == "knn_sa":
+        knn = 2
+        policy = KNNSAPolicy(zarr_path="/home/harvey/Project/diffusion_policy/data/kowndi_pusht_demo_v2_repulse.zarr", horizon=16, pad_before=1, pad_after=7, knn=knn)
+        sample_tree = PolicySampleTree(policy, k_sample=2, max_depth=3)
+    
     # run eval
     env_runner = hydra.utils.instantiate(cfg.task.env_runner, output_dir=output_dir)
     runner_log = env_runner.run(policy)

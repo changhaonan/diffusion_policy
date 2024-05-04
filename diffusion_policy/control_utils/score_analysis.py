@@ -18,7 +18,7 @@ from diffusion_policy.policy.base_image_policy import BaseImagePolicy
 from diffusion_policy.common.pytorch_util import dict_apply
 from diffusion_policy.workspace.base_workspace import BaseWorkspace
 from diffusion_policy.control_utils.trajectory_filter import trajectory_filter
-from diffusion_policy.control_utils.frequence_policy import FreqActionFieldPolicy
+from diffusion_policy.control_utils.knn_policy import KNNPolicy
 
 
 def draw_action(image, agent_pos, naction, project_matrix=None, color=None):
@@ -175,7 +175,7 @@ def main(checkpoint, output_dir, device):
         policy.eval()
     else:
         # load frequence policy
-        policy = FreqActionFieldPolicy(zarr_path="/home/harvey/Project/diffusion_policy/data/kowndi_pusht_demo_v2_repulse.zarr", horizon=16, pad_before=1, pad_after=7)
+        policy = KNNPolicy(zarr_path="/home/harvey/Project/diffusion_policy/data/kowndi_pusht_demo_v2_repulse.zarr", horizon=16, pad_before=1, pad_after=7)
 
     # Run score analysis
     seed = 10011
