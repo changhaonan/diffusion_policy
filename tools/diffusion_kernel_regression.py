@@ -212,7 +212,7 @@ class DiffusionKernelRegression:
                 data_pred = np.sum(kernel[:, None] * local_datas, axis=0) / np.sum(kernel)
                 # c = 0.1 / partition
                 # data_pred = np.sum(kernel[:, None] * local_datas, axis=0) / (np.sum(kernel) + c)
-                # print(f"{i}| Current partition: {partition}")
+                print(f"{i}| Current partition: {partition}, data_diff: {np.linalg.norm(data_diff, axis=1).mean()}, condition_diff: {np.linalg.norm(condition_diff, axis=1).mean()}")
                 if i > 0:
                     # Update the step
                     sample = (
@@ -227,7 +227,9 @@ class DiffusionKernelRegression:
                     sample = np.clip(sample, -1, 1)
                 if return_trajectory:
                     trajectory.append(sample)
-            samples.append(sample)
+            #FIXME: Get the nearest sample
+            # sample = local_datas[np.argmin(np.linalg.norm(local_datas - sample, axis=1))]
+            samples.append(sample.squeeze())
             if return_trajectory:
                 trajectories.append(trajectory)
         samples = np.stack(samples, axis=0)
@@ -274,6 +276,8 @@ class DiffusionKernelRegression:
         # Compute neighbors based on the state
         dist = np.linalg.norm(self.conditions - condition[None, :], axis=-1).squeeze()
         idx = np.argsort(dist)[:knn_max].squeeze()
+        if knn_max == 1:
+            idx = np.array([idx])
         return self.conditions[idx, :], self.datas[idx]
 
     def _get_scheduler(self, beta_start=0.0001, beta_end=0.02, scheduler_type="linear"):
@@ -291,6 +295,7 @@ class DiffusionKernelRegression:
         alpha_bar_t = np.cumprod(alpha_t)
         sigma_t = (1 - alpha_bar_t[1:]) / (1 - alpha_bar_t[:-1]) * beta_t[1:]
         h_t = np.sqrt((1 - alpha_bar_t) / alpha_bar_t)
+        # h_t = (1 - alpha_bar_t) / alpha_bar_t
         return alpha_t, beta_t, alpha_bar_t, sigma_t, h_t
 
     def _betas_for_alpha_bar(self, num_diffusion_timesteps, max_beta=0.999, alpha_transform_type="cosine"):
@@ -337,6 +342,34 @@ class DiffusionKernelRegressionPolicy(DiffusionKernelRegression):
         actions = np.reshape(actions, [actions.shape[0], self.n_act_steps, -1])
         return actions
 
+
+class DKRStateActionPolicy(DiffusionKernelRegression):
+    """Estimated diffusion kernel regression state action policy."""
+
+    def __init__(self, states, state_actions, horizon: int = 8, n_obs_steps: int = 2, n_act_steps: int = 4, knn_max: int = 30, diffusion_steps: int = 100, scheduler_type: str = "linear", **kwargs):
+        # Reshape the states and actions
+        self.obs_dim = states.shape[-1]
+        self.act_dim = state_actions.shape[-1] - self.obs_dim
+        states = np.reshape(states, [states.shape[0], -1])
+        state_actions = np.reshape(state_actions, [state_actions.shape[0], -1])
+        super().__init__(datas=state_actions, conditions=states, knn_max=knn_max, diffusion_steps=diffusion_steps, scheduler_type=scheduler_type)
+        self.horizon = horizon
+        self.n_obs_steps = n_obs_steps
+        self.n_act_steps = n_act_steps
+
+    def predict_state_action(self, obs_dict: Dict[str, torch.Tensor], **kwargs):
+        batch_size = kwargs.get("batch_size", 4)
+        obs = obs_dict["state"]
+        if isinstance(obs, torch.Tensor):
+            obs = obs.cpu().numpy()
+        obs = np.reshape(obs, [obs.shape[0], -1])
+        state_actions = self.conditional_sampling(condition=obs, batch_size=batch_size)
+        # Reshape the actions
+        state_actions = np.reshape(state_actions, [state_actions.shape[0], self.n_act_steps, -1])
+        # Split the state and action
+        states = state_actions[:, :, :self.obs_dim]
+        actions = state_actions[:, :, self.obs_dim:]
+        return states, actions
 
 ########################################## Image part ##########################################
 from PIL import Image

@@ -2,7 +2,8 @@ import torch
 import tqdm
 import numpy as np
 import matplotlib.pyplot as plt
-from diffusion_kernel_regression import DiffusionKernelRegressionPolicy, SequenceDataset
+from diffusion_kernel_regression import DiffusionKernelRegressionPolicy, SequenceDataset, DKRStateActionPolicy
+from policy_sample_tree import PolicySampleTree
 
 
 # Define the spiral function in polar coordinates (r = a + b*theta)
@@ -82,7 +83,7 @@ def generate_raw_data(num_sample, circle_round, reverse_B: bool = False, vis: bo
     return episodes, masked_state
 
 
-def draw_state_action(state, actions, epsiodes=None, save_path=None):
+def draw_state_action(states, actions, pred_states, epsiodes=None, save_path=None):
     fig, ax = plt.subplots()
     if epsiodes is not None:
         for _i, episode in enumerate(epsiodes):
@@ -91,20 +92,55 @@ def draw_state_action(state, actions, epsiodes=None, save_path=None):
             # ax.plot(state[:, 0], state[:, 1], label="State", c="black")
             color = "red" if _i == 0 else "blue"
             ax.quiver(_state[:, 0], _state[:, 1], _action[:, 0], _action[:, 1], color=color)
-    ax.scatter(state[:, 0], state[:, 1], label="State", c="black", alpha=0.5)
-
+    ax.scatter(states[:, 0], states[:, 1], label="State", c="black", alpha=0.5)
+    # pred_states = pred_states.reshape(-1, pred_states.shape[-1])
+    for _i in range(pred_states.shape[0]):
+        color = plt.cm.jet(_i / pred_states.shape[0])
+        ax.plot(pred_states[_i, :, 0], pred_states[_i, :, 1], c=color, marker="x", markersize=2)
     if actions.ndim == 2:
         actions = actions[None, :]
-    for i in range(actions.shape[0]):
-        # Predict state
-        cum_action = np.cumsum(actions[i], axis=0)
-        pred_state = state[-1] + cum_action
-        pred_state = np.concatenate([state[-1][None, :], pred_state], axis=0)
-        # pred_state = state[1] + cum_action[1:]
-        ax.plot(pred_state[:, 0], pred_state[:, 1], c="green", marker="x", markersize=2)
+    # for i in range(actions.shape[0]):
+    #     # Predict state
+    #     cum_action = np.cumsum(actions[i], axis=0)
+    #     pred_state = states[-1] + cum_action
+    #     pred_state = np.concatenate([states[-1][None, :], pred_state], axis=0)
+    #     # pred_state = state[1] + cum_action[1:]
+    #     ax.plot(pred_state[:, 0], pred_state[:, 1], c="green", marker="x", markersize=2)
     ax.axis("equal")
     plt.title("State and Action")
     plt.legend()
+    if save_path is not None:
+        plt.savefig(save_path)
+    else:
+        plt.show()
+
+
+def draw_state_action_list(state_list, action_list, depth_list, epsiodes=None, save_path=None):
+    fig, ax = plt.subplots()
+    if epsiodes is not None:
+        for _i, episode in enumerate(epsiodes):
+            _state = episode["state"]
+            _action = episode["action"]
+            # ax.plot(state[:, 0], state[:, 1], label="State", c="black")
+            color = "red" if _i == 0 else "blue"
+            ax.quiver(_state[:, 0], _state[:, 1], _action[:, 0], _action[:, 1], color=color)
+    for _i, (states, actions, depths) in enumerate(zip(state_list, action_list, depth_list)):
+        if actions is None:
+            continue
+        # color based on depth
+        color = plt.cm.jet(depths / 3)
+        ax.scatter(states[:, 0], states[:, 1], label="State", c="black", alpha=0.5)
+        if actions.ndim == 2:
+            actions = actions[None, :]
+        for i in range(actions.shape[0]):
+            # Predict state
+            cum_action = np.cumsum(actions[i], axis=0)
+            pred_state = states[-1] + cum_action
+            pred_state = np.concatenate([states[-1][None, :], pred_state], axis=0)
+            # pred_state = state[1] + cum_action[1:]
+            ax.plot(pred_state[:, 0], pred_state[:, 1], c=color, marker="x", markersize=1)
+    ax.axis("equal")
+    plt.title("State and Action")
     if save_path is not None:
         plt.savefig(save_path)
     else:
@@ -122,21 +158,23 @@ def env_step(states, actions, n_act_steps):
 
 if __name__ == "__main__":
     import os
+
     root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     oputput_dir = f"{root_dir}/output"
     os.makedirs(oputput_dir, exist_ok=True)
 
     # Parameters
-    num_sample = 1000
-    circle_round = 16
+    num_sample = 500
+    circle_round = 8
     reverse_B = False
 
     n_obs_steps = 1
     n_act_steps = 4
     horizon = 8
-    diffusion_steps = 100
+    diffusion_steps = 1000
     knn_max = 10
     batch_size = 8
+    # scheduler_type = "linear"
     scheduler_type = "squaredcos_cap_v2"
     assert n_obs_steps + n_act_steps <= horizon, "n_obs_steps + n_act_steps should be less than horizon"
     # Generate raw data
@@ -150,9 +188,11 @@ if __name__ == "__main__":
     full_state, full_action = dataset.all_state_actions()
     state = full_state[:, :n_obs_steps, :]
     action = full_action[:, n_obs_steps - 1 : n_obs_steps - 1 + n_act_steps, :]
-    policy = DiffusionKernelRegressionPolicy(
-        states=state, actions=action, horizon=horizon, n_obs_steps=n_obs_steps, n_act_steps=n_act_steps, knn_max=knn_max, diffusion_steps=diffusion_steps, scheduler_type=scheduler_type
-    )
+    state_action = np.concatenate([full_state[:, n_obs_steps - 1 : n_obs_steps - 1 + n_act_steps, :], full_action[:, n_obs_steps - 1 : n_obs_steps - 1 + n_act_steps, :]], axis=-1)
+    # state_action = full_state[:, n_obs_steps - 1 : n_obs_steps - 1 + n_act_steps, :]
+    # policy = DiffusionKernelRegressionPolicy(
+    #     states=state, actions=action, horizon=horizon, n_obs_steps=n_obs_steps, n_act_steps=n_act_steps, knn_max=knn_max, diffusion_steps=diffusion_steps, scheduler_type=scheduler_type
+    # )
 
     # # Test dataset
     # for i in range(10):
@@ -160,24 +200,41 @@ if __name__ == "__main__":
     #     # print(data["state"].shape, data["action"].shape)
     #     draw_state_action(state[idx, :], action[idx, :], epsiodes)
 
+    # # Dynamic test
+    # for i in range(1):
+    #     idx = np.random.randint(masked_state.shape[0])
+    #     sample_state = state[idx, ...]
+    #     for j in tqdm.tqdm(range(200)):
+    #         action_pred = policy.predict_action({"state": torch.tensor(sample_state[-n_obs_steps:, :], dtype=torch.float32)}, batch_size=batch_size)
+    #         draw_state_action(sample_state[:n_obs_steps, :], action_pred, epsiodes, save_path=os.path.join(oputput_dir, f"dyn_test_{i}_{j}.png"))
+    #         # randomly select an action
+    #         action_idx = np.random.randint(action_pred.shape[0])
+    #         action = action_pred[action_idx]
+    #         # Step environment
+    #         next_state = env_step(sample_state[:n_obs_steps, :], action, n_act_steps)
+    #         sample_state = next_state[-n_obs_steps:, :]
+
+    # Test policy sample tree
+    sa_policy = DKRStateActionPolicy(
+        states=state, state_actions=state_action, horizon=horizon, n_obs_steps=n_obs_steps, n_act_steps=n_act_steps, knn_max=knn_max, diffusion_steps=diffusion_steps, scheduler_type=scheduler_type
+    )
     # # Static test
     # for i in range(10):
     #     idx = np.random.randint(masked_state.shape[0])
     #     # state = masked_state[idx].reshape(1, -1)
     #     sample_state = state[idx, ...]
-    #     action_pred = policy.predict_action({"state": torch.tensor(sample_state[:n_obs_steps, :], dtype=torch.float32)}, batch_size=batch_size)
-    #     draw_state_action(sample_state[:n_obs_steps, :], action_pred, epsiodes, save_path=os.path.join(oputput_dir, f"test_{i}.png"))
+    #     state_pred, action_pred = sa_policy.predict_state_action({"state": torch.tensor(sample_state[:n_obs_steps, :], dtype=torch.float32)}, batch_size=batch_size)
+    #     draw_state_action(sample_state[:n_obs_steps, :], action_pred, state_pred, epsiodes, save_path=None)
 
-    # Dynamic test
-    for i in range(1):
+
+    # Expand
+    policy_tree = PolicySampleTree(policy=sa_policy, k_sample=4, max_depth=3)
+    for i in range(10):
         idx = np.random.randint(masked_state.shape[0])
         sample_state = state[idx, ...]
-        for j in tqdm.tqdm(range(200)):
-            action_pred = policy.predict_action({"state": torch.tensor(sample_state[-n_obs_steps:, :], dtype=torch.float32)}, batch_size=batch_size)
-            draw_state_action(sample_state[:n_obs_steps, :], action_pred, epsiodes, save_path=os.path.join(oputput_dir, f"dyn_test_{i}_{j}.png"))
-            # randomly select an action
-            action_idx = np.random.randint(action_pred.shape[0])
-            action = action_pred[action_idx]
-            # Step environment
-            next_state = env_step(sample_state[:n_obs_steps, :], action, n_act_steps)
-            sample_state = next_state[-n_obs_steps:, :]
+        policy_tree.reset()
+        policy_tree.expand_tree({"state": sample_state[:n_obs_steps, :]})
+        # Draw tree
+        state_list, action_list, depth_list = policy_tree.export()
+
+        draw_state_action_list(state_list, action_list, depth_list, epsiodes, save_path=None)
