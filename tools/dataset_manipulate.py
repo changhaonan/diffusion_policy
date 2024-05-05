@@ -167,6 +167,7 @@ if __name__ == "__main__":
     # convertion_str = "control2ratio_control"
     # convertion_str = "convert_v0_to_v1"
     convertion_str = "convert_v1_to_v2"
+    # convertion_str = "convert_v0_to_v2"
 
     root = read_from_path(os.path.join(data_src, src_data))
     convert(root, tar_data, convertion_str, cpr=cpr)

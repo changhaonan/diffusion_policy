@@ -1,4 +1,5 @@
 """Policy Sample Tree."""
+import numpy as np
 from diffusion_policy.policy.base_sa_policy import BaseSAPolicy
 from collections import namedtuple
 
@@ -34,8 +35,14 @@ class PolicySampleTree:
         # Expand a node in the tree
         node = self.nodes[node_id]
         state = node.state
-        pred = self.policy.predict_state_action({"state": state}, batch_size=self.k_sample)
+        # Repeat the state for k_sample times
+        # repeat_state = np.repeat(state[-1:, ...], self.k_sample, axis=0)
+        state = state[-1:, ...]
+        pred = self.policy.predict_state_action({"state": state}, knn=self.k_sample)
         pred_states, pred_actions = pred["state"], pred["action"]
+        # Convert to numpy
+        pred_states = pred_states.cpu().numpy()
+        pred_actions = pred_actions.cpu().numpy()
         # Overwrite the action of the node
         self.nodes[node_id] = SANode(state=node.state, action=pred_actions[:, :self.n_act_steps, :], depth=node.depth, value=None, children=node.children)
         for i in range(self.k_sample):
@@ -50,8 +57,10 @@ class PolicySampleTree:
         states = []
         actions = []
         depths = []
+        childrens = []
         for node in self.nodes:
             states.append(node.state)
             actions.append(node.action)
             depths.append(node.depth)
-        return states, actions, depths
+            childrens.append(node.children)
+        return states, actions, depths, childrens

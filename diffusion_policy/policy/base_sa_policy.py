@@ -16,7 +16,7 @@ class BaseSAPolicy(ModuleAttrMixin):
         """
         raise NotImplementedError()
     
-    def predict_state_action(self, obs_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def predict_state_action(self, obs_dict: Dict[str, torch.Tensor], **kwargs) -> Dict[str, torch.Tensor]:
         """Predict the action and resulting futer state given the current state.
         obs_dict:
             str: B,To,*
