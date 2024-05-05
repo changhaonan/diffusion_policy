@@ -94,9 +94,10 @@ def draw_state_action(states, actions, pred_states, epsiodes=None, save_path=Non
             ax.quiver(_state[:, 0], _state[:, 1], _action[:, 0], _action[:, 1], color=color)
     ax.scatter(states[:, 0], states[:, 1], label="State", c="black", alpha=0.5)
     # pred_states = pred_states.reshape(-1, pred_states.shape[-1])
-    for _i in range(pred_states.shape[0]):
-        color = plt.cm.jet(_i / pred_states.shape[0])
-        ax.plot(pred_states[_i, :, 0], pred_states[_i, :, 1], c=color, marker="x", markersize=2)
+    if pred_states is not None:
+        for _i in range(pred_states.shape[0]):
+            color = plt.cm.jet(_i / pred_states.shape[0])
+            ax.plot(pred_states[_i, :, 0], pred_states[_i, :, 1], c=color, marker="x", markersize=2)
     if actions.ndim == 2:
         actions = actions[None, :]
     # for i in range(actions.shape[0]):
@@ -157,6 +158,7 @@ def env_step(states, actions, n_act_steps):
 
 
 if __name__ == "__main__":
+    # Testing the orbit behavior
     import os
 
     root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -189,16 +191,12 @@ if __name__ == "__main__":
     state = full_state[:, :n_obs_steps, :]
     action = full_action[:, n_obs_steps - 1 : n_obs_steps - 1 + n_act_steps, :]
     state_action = np.concatenate([full_state[:, n_obs_steps - 1 : n_obs_steps - 1 + n_act_steps, :], full_action[:, n_obs_steps - 1 : n_obs_steps - 1 + n_act_steps, :]], axis=-1)
-    # state_action = full_state[:, n_obs_steps - 1 : n_obs_steps - 1 + n_act_steps, :]
-    # policy = DiffusionKernelRegressionPolicy(
-    #     states=state, actions=action, horizon=horizon, n_obs_steps=n_obs_steps, n_act_steps=n_act_steps, knn_max=knn_max, diffusion_steps=diffusion_steps, scheduler_type=scheduler_type
-    # )
 
-    # # Test dataset
-    # for i in range(10):
-    #     idx = np.random.randint(len(dataset))
-    #     # print(data["state"].shape, data["action"].shape)
-    #     draw_state_action(state[idx, :], action[idx, :], epsiodes)
+    # Test dataset
+    for i in range(10):
+        idx = np.random.randint(len(dataset))
+        # print(data["state"].shape, data["action"].shape)
+        draw_state_action(state[idx, :], action[idx, :], None, epsiodes)
 
     # # Dynamic test
     # for i in range(1):

@@ -26,6 +26,7 @@ from diffusion_policy.control_utils.knn_policy import KNNPolicy, KNNSAPolicy
 from diffusion_policy.control_utils.policy_sample_tree import PolicySampleTree
 from diffusion_policy.env.pusht.pusht_env import PushTEnv
 
+
 ############################## Utils ##############################
 def extract_skeleton_from_tree(depths, childrens):
     # Compue all leaf nodes first
@@ -50,6 +51,7 @@ def extract_skeleton_from_tree(depths, childrens):
             depth -= 1
         tree_skeletons.append(skeleton[::-1])
     return tree_skeletons
+
 
 def visualize_policy_tree(states, actions, depths, childrens):
     env = PushTEnv()
@@ -85,15 +87,14 @@ def visualize_policy_tree(states, actions, depths, childrens):
         cv2.waitKey(0)
 
 
-def test_policy_sample_tree(policy_sample_tree: PolicySampleTree, n_samples=10):
+def test_policy_sample_tree(policy_sample_tree: PolicySampleTree, seed, n_samples=10):
     obs_horizon = policy_sample_tree.n_obs_steps
-    obs_queue = []
     # Init env
     env = PushTEnv()
-    env.seed(0)
+    env.seed(seed)
     obs = env.reset()  # This is state
     obs_deque = collections.deque([obs] * obs_horizon, maxlen=obs_horizon)
-    
+
     for i in range(1):
         # Expand states
         states = np.stack(obs_deque, axis=0)  # (obs_step, Do)
@@ -102,7 +103,6 @@ def test_policy_sample_tree(policy_sample_tree: PolicySampleTree, n_samples=10):
         # Check the expanded tree
         states, actions, depths, childrens = policy_sample_tree.export()
         visualize_policy_tree(states, actions, depths, childrens)
-        pass
 
 
 @click.command()
@@ -138,11 +138,11 @@ def main(checkpoint, data_root, output_dir, device, algorithm):
         knn = 2
         policy = KNNPolicy(zarr_path=f"{data_root}/kowndi_pusht_demo_v2_repulse.zarr", horizon=16, pad_before=1, pad_after=7, knn=knn)
     elif algorithm == "knn_sa":
-        knn = 4
+        knn = 5
         policy = KNNSAPolicy(zarr_path=f"{data_root}/kowndi_pusht_demo_v2_repulse.zarr", horizon=16, pad_before=1, pad_after=7, knn=knn)
-        sample_tree = PolicySampleTree(policy, k_sample=4, max_depth=2)
+        sample_tree = PolicySampleTree(policy, k_sample=5, max_depth=2)
 
-    test_policy_sample_tree(sample_tree)
+    test_policy_sample_tree(sample_tree, seed=5)
     # # run eval
     # env_runner = hydra.utils.instantiate(cfg.task.env_runner, output_dir=output_dir)
     # runner_log = env_runner.run(policy)

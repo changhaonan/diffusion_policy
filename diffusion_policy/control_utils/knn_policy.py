@@ -59,6 +59,7 @@ class KNNPolicy(BaseImagePolicy):
         result: must include "action" key
         """
         assert "past_action" not in obs_dict  # not implemented yet
+        knn = kwargs.get("knn", self.knn)
         # read state
         info = kwargs["info"]
         if isinstance(info, dict):
@@ -79,7 +80,7 @@ class KNNPolicy(BaseImagePolicy):
             state = np.concatenate([pos_agent, block_pose])
             # state[-1] = state[-1] / np.pi * 200  # emphasize the last dim
             # Find the k  closest state in the current episode
-            closest_state_idx = self.get_closet_state(state, self.knn, allow_same_episode=False)
+            closest_state_idx = self.get_closet_state(state, knn, allow_same_episode=False)
             # Randomly choose one of the closest states
             closest_state_idx = np.random.choice(closest_state_idx)
             closest_episode_id = self.episode_ids[closest_state_idx].item()
@@ -115,9 +116,11 @@ class KNNPolicy(BaseImagePolicy):
                 distances[self.episode_ids[:, 0] == closest_episode_id] = np.inf
             closest_state_idx = np.array(closest_state_idx)
         # [DEBUG] check state difference
-        print("State difference:")
-        for idx in closest_state_idx:
-            print(np.linalg.norm(self.states[idx] - state))
+        # print("State difference:")
+        # for idx in closest_state_idx:
+        #     print(np.linalg.norm(self.states[idx] - state))
+        print("--------------------")
+        print("closest_episode_id:", self.episode_ids[closest_state_idx])
         return closest_state_idx
         
 
