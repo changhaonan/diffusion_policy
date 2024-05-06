@@ -12,14 +12,17 @@ from diffusion_policy.policy.base_sa_policy import BaseSAPolicy
 class KNNPolicy(BaseImagePolicy):
     """KNN Policy field."""
 
-    def __init__(self, zarr_path, horizon=1, pad_before=0, pad_after=0, kernel=None, knn=4):
+    def __init__(self, zarr_path, horizon=1, pad_before=0, pad_after=0, kernel=None, knn=4, keys=["img", "state", "action", "control", "demo_type"]):
         print("Start loading dataset to memory...")
-        self.replay_buffer = ReplayBuffer.copy_from_path(zarr_path, keys=["img", "state", "action", "control", "demo_type"])
+        self.replay_buffer = ReplayBuffer.copy_from_path(zarr_path, keys=keys)
         print("Dataset loaded.")
         self.sampler = SequenceSampler(replay_buffer=self.replay_buffer, sequence_length=horizon, pad_before=pad_before, pad_after=pad_after)
         self.states = np.copy(self.replay_buffer["state"])  # local copy
         # Emphasize the last dim of states
-        self.states[..., -1] = self.states[..., -1] / np.pi * 200
+        self.states_weights = np.ones(self.states.shape[-1])
+        # self.states[..., -1] = self.states[..., -1] / np.pi * 200
+        # Apply weights to the last channel
+        self.states = self.states * self.states_weights
         episode_lengths = self.replay_buffer.episode_lengths
         self.episode_ids = [[i] * l for i, l in enumerate(episode_lengths)]
         self.episode_ids = np.stack(sum(self.episode_ids, [])).reshape(-1, 1)
@@ -78,9 +81,8 @@ class KNNPolicy(BaseImagePolicy):
                 pos_agent = pos_agent[-1]
                 block_pose = block_pose[-1]
             state = np.concatenate([pos_agent, block_pose])
-            # state[-1] = state[-1] / np.pi * 200  # emphasize the last dim
             # Find the k  closest state in the current episode
-            closest_state_idx = self.get_closet_state(state, knn, allow_same_episode=False)
+            closest_state_idx = self.get_closet_state(state, knn, allow_same_episode=kwargs.get("allow_same_episode", False))
             # Randomly choose one of the closest states
             closest_state_idx = np.random.choice(closest_state_idx)
             closest_episode_id = self.episode_ids[closest_state_idx].item()
@@ -102,7 +104,8 @@ class KNNPolicy(BaseImagePolicy):
     def get_closet_state(self, state, knn, allow_same_episode=False):
         """Get the closest state in the replay buffer."""
         state = np.copy(state)
-        state[-1] = state[-1] / np.pi * 200  # emphasize the last dim
+        # state[-1] = state[-1] / np.pi * 200  # emphasize the last dim
+        state = state * self.states_weights
         distances = np.linalg.norm(self.states - state, axis=1)
         if allow_same_episode:
             closest_state_idx = np.argsort(distances)[: knn]
@@ -116,17 +119,17 @@ class KNNPolicy(BaseImagePolicy):
                 distances[self.episode_ids[:, 0] == closest_episode_id] = np.inf
             closest_state_idx = np.array(closest_state_idx)
         # [DEBUG] check state difference
-        # print("State difference:")
-        # for idx in closest_state_idx:
-        #     print(np.linalg.norm(self.states[idx] - state))
-        print("--------------------")
-        print("closest_episode_id:", self.episode_ids[closest_state_idx])
+        # print("--------------------")
+        # print("closest_episode_id:", self.episode_ids[closest_state_idx])
+        # print("state difference:", np.linalg.norm(self.states[closest_state_idx] - state, axis=1))
+        # print("state:", state)
+        # print("closest_state:", self.states[closest_state_idx])
         return closest_state_idx
         
 
 class KNNSAPolicy(KNNPolicy, BaseSAPolicy):
-    def __init__(self, zarr_path, horizon=1, pad_before=0, pad_after=0, kernel=None, knn=4):
-        super().__init__(zarr_path, horizon, pad_before, pad_after, kernel, knn)
+    def __init__(self, zarr_path, horizon=1, pad_before=0, pad_after=0, kernel=None, knn=4, keys=["img", "state", "action", "control", "demo_type"]):
+        super().__init__(zarr_path, horizon, pad_before, pad_after, kernel, knn, keys)
 
     def predict_state_action(self, obs_dict: Dict[str, torch.Tensor], knn, **kwargs) -> Dict[str, torch.Tensor]:
         assert "past_action" not in obs_dict  # not implemented yet
@@ -161,7 +164,7 @@ class KNNSAPolicy(KNNPolicy, BaseSAPolicy):
         closest_state_idx_list = []
         for state in states:
             # Find the k  closest state in the current episode
-            closest_state_idx = self.get_closet_state(state, knn, allow_same_episode=False)
+            closest_state_idx = self.get_closet_state(state, knn, allow_same_episode=kwargs.get("allow_same_episode", False))
             # Randomly choose one of the knn closest states
             chosen_num = 1 if states.shape[0] != 1 else knn
             assert chosen_num <= closest_state_idx.shape[0], "Not enough samples in the replay buffer."
