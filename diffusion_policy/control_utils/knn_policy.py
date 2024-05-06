@@ -133,7 +133,6 @@ class KNNSAPolicy(KNNPolicy, BaseSAPolicy):
         super().__init__(zarr_path, horizon, pad_before, pad_after, kernel, knn, keys)
 
     def predict_state_action(self, obs_dict: Dict[str, torch.Tensor], knn, **kwargs) -> Dict[str, torch.Tensor]:
-        assert "past_action" not in obs_dict  # not implemented yet
         # Read state
         if "state" not in obs_dict:
             # read state

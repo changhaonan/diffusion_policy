@@ -11,6 +11,7 @@ from diffusion_policy.common.replay_buffer import ReplayBuffer
 from diffusion_policy.control_utils.knn_policy import KNNSAPolicy
 from diffusion_policy.control_utils.policy_sample_tree import PolicySampleTree
 
+
 #######################  Generating data #######################
 # Define the spiral function in polar coordinates (r = a + b*theta)
 def spiral(theta, beta=0.0, gamma=1.0, a=0.0, b=0.1):
@@ -145,19 +146,19 @@ class OrbitEnv(gym.Env):
         vis_image = self.bg_image.copy()
         # Draw agent
         vis_image = cv2.circle(vis_image, (int(self.agent_pos[0] * 256 + 256), int(self.agent_pos[1] * 256 + 256)), 3, [0, 255, 0], 1)
-        # Draw action
-        if self.actions is not None:
-            acted_pos = np.copy(self.prev_agent_pos)
-            for action in self.actions:
-                # acted_pos += action
-                vis_image = cv2.arrowedLine(
-                    vis_image,
-                    (int(acted_pos[0] * 256 + 256), int(acted_pos[1] * 256 + 256)),
-                    (int((acted_pos + action)[0] * 256 + 256), int((acted_pos + action)[1] * 256 + 256)),
-                    [0, 255, 0],
-                    1,
-                )
-                acted_pos += action
+        # # Draw action
+        # if self.actions is not None:
+        #     acted_pos = np.copy(self.prev_agent_pos)
+        #     for action in self.actions:
+        #         # acted_pos += action
+        #         vis_image = cv2.arrowedLine(
+        #             vis_image,
+        #             (int(acted_pos[0] * 256 + 256), int(acted_pos[1] * 256 + 256)),
+        #             (int((acted_pos + action)[0] * 256 + 256), int((acted_pos + action)[1] * 256 + 256)),
+        #             [0, 255, 0],q
+        #             1,
+        #         )
+        #         acted_pos += action
         # Draw previous agent
         vis_image = cv2.circle(vis_image, (int(self.prev_agent_pos[0] * 256 + 256), int(self.prev_agent_pos[1] * 256 + 256)), 3, [0, 0, 255], 1)
         return vis_image
@@ -185,16 +186,17 @@ class OrbitEnv(gym.Env):
         return background_image
 
 
-def visualize_orbit_tree(states, actions, skeletons, env: OrbitEnv):
+def visualize_orbit_tree(states, actions, values, skeletons, env: OrbitEnv):
     root_state = states[0]
     env.reset()
     env.set_state(root_state[-1, :])
     img = env.render()
-    cv2.imshow("Orbit", img)
-    cv2.waitKey(0)
+    # cv2.imshow("Orbit", img)
+    # cv2.waitKey(0)
     # Visualize
     for idx, skeleton in enumerate(skeletons):
         vis_img = np.copy(img)
+        # visq_img = img
         for node_idx in skeleton:
             color = plt.cm.jet(idx / len(skeletons))
             color = [int(color[0] * 255), int(color[1] * 255), int(color[2] * 255)]
@@ -213,9 +215,35 @@ def visualize_orbit_tree(states, actions, skeletons, env: OrbitEnv):
                         )
                         vis_img = cv2.circle(vis_img, (int(acted_pos[0] * 256 + 256), int(acted_pos[1] * 256 + 256)), 3, color, 1)
                         acted_pos += act
+        skeleton_values = [values[node_idx] for node_idx in skeleton]
+        # print(f"Values: {skeleton_values}")
         skeleton_str = ", ".join([str(node_idx) for node_idx in skeleton])
         cv2.imshow(f"Orbit-{skeleton_str}", vis_img)
         cv2.waitKey(0)
+        cv2.destroyAllWindows()
+
+
+def get_reward_func(control_type, **kwargs):
+    # Return a value function based on the cotrol type:
+    if control_type == "goal":
+        def reward_func(states):
+            if states.ndim == 2:
+                states = states[-1]  # Only consider the last state
+            goal = np.array([0.0, 0.0])
+            return -np.linalg.norm(states - goal)
+        return reward_func
+    elif control_type == "avoid":
+        def reward_func(states):
+            if states.ndim == 1:
+                states = states[None, :]
+            obstacle = kwargs.get("obstacle", np.array([0.3, 0.3]))
+            # Compute the nearest distance to the obstacle
+            dist = np.linalg.norm(states - obstacle, axis=1)
+            min_dist = np.min(dist)
+            return min_dist
+        return reward_func
+    else:
+        raise ValueError("Invalid control type")
 
 
 if __name__ == "__main__":
@@ -231,6 +259,7 @@ if __name__ == "__main__":
     batch_size = 8
     # scheduler_type = "linear"
     scheduler_type = "squaredcos_cap_v2"
+    control_type = "goal"  # goal, avoid, attract...
 
     # Generate orbit data
     assert n_obs_steps + n_act_steps <= horizon, "n_obs_steps + n_act_steps should be less than horizon"
@@ -256,15 +285,22 @@ if __name__ == "__main__":
 
     # Dynamic test
     sa_policy.reset()
-    policy_tree.reset()
+
+    reward_func = get_reward_func(control_type)
 
     for i in range(1000):
+        policy_tree.reset()
         # Test tree
-        policy_tree.expand_tree({"state": np.stack([obs] * n_obs_steps, axis=0)})
-        states, actions, skeletons = policy_tree.export()
-        visualize_orbit_tree(states, actions, skeletons, test_env)
-        break
-
+        policy_tree.expand_tree({"state": np.stack([obs] * n_obs_steps, axis=0)}, reward_func=reward_func)
+        states, actions, values, skeletons, branch_idxs = policy_tree.export()
+        visualize_orbit_tree(states, actions, values, skeletons, test_env)
+        # Rank actions based on the value
+        skeleton_values = [values[skeleton[1]] for skeleton in skeletons]
+        best_skeleton_idx = np.argmax(skeleton_values)
+        best_skeleton = skeletons[best_skeleton_idx]
+        best_action = actions[best_skeleton[0]][branch_idxs[best_skeleton[1]]]
+        obs = env.step(best_action)
+        print(f"Step {i}, obs: {obs}")
         ## Testing different control effects; Selecting the best action
 
         # pred = sa_policy.predict_state_action({"state": np.stack([obs] * n_obs_steps, axis=0)}, knn=3, allow_same_episode=True)
@@ -278,7 +314,7 @@ if __name__ == "__main__":
 
         # # Expand the policy tree
         # print(f"Step {i}, obs: {obs}")
-        # if np.linalg.norm(obs) < 0.1:
-        #     break
+        if np.linalg.norm(obs) < 0.1:
+            break
         # cv2.imshow("Orbit", img)
         # cv2.waitKey(1)
