@@ -9,6 +9,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from diffusion_policy.common.replay_buffer import ReplayBuffer
 from diffusion_policy.control_utils.knn_policy import KNNSAPolicy
+from diffusion_policy.control_utils.policy_sample_tree import PolicySampleTree
 
 #######################  Generating data #######################
 
@@ -19,17 +20,6 @@ def spiral(theta, beta=0.0, gamma=1.0, a=0.0, b=0.1):
     gamma_a = math.sqrt(gamma / (1 + gamma))
     gamma_b = math.sqrt(1 / (1 + gamma))
     return gamma_a * r * np.cos(theta + beta), gamma_b * r * np.sin(theta + beta)
-
-
-# # Derivative of the spiral function to compute gradient
-# def spiral_gradient(theta, a=0, b=0.1):
-#     # Gradient in polar coordinates
-#     dr_dtheta = b
-#     r = a + b * theta
-#     # Conversion to Cartesian coordinates
-#     dx_dtheta = dr_dtheta * np.cos(theta) - r * np.sin(theta)
-#     dy_dtheta = dr_dtheta * np.sin(theta) + r * np.cos(theta)
-#     return dx_dtheta, dy_dtheta
 
 
 def generate_raw_data(num_sample, circle_round, reverse_B: bool = False, vis: bool = False):
@@ -149,6 +139,9 @@ class OrbitEnv(gym.Env):
         self.prev_agent_pos = self.agent_pos
         return self.agent_pos
 
+    def set_state(self, state):
+        self.agent_pos = state
+
     def render(self):
         # Render env
         vis_image = self.bg_image.copy()
@@ -194,6 +187,33 @@ class OrbitEnv(gym.Env):
         return background_image
 
 
+def visualize_orbit_tree(states, actions, skeletons, env: OrbitEnv):
+    root_state = states[0]
+    env.reset()
+    env.set_state(root_state[-1, :])
+    img = env.render()
+
+    # Visualize
+    for skeleton in skeletons:
+        for node_idx in skeleton:
+            state = states[node_idx]
+            action = actions[node_idx]
+            # Draw the state and action
+            img = cv2.circle(img, (int(state[-1, 0] * 128 + 128), int(state[-1, 1] * 128 + 128)), 2, [255, 255, 0], 1)
+            # Draw the action
+            if action is not None:
+                acted_pos = np.copy(state[-1])
+                for _i in range(action.shape[0]):
+                    for _j in range(action.shape[1]):
+                        act = action[_i, _j]
+                        img = cv2.arrowedLine(
+                            img, (int(acted_pos[0] * 128 + 128), int(acted_pos[1] * 128 + 128)), (int((acted_pos + act)[0] * 128 + 128), int((acted_pos + act)[1] * 128 + 128)), [0, 255, 0], 1
+                        )
+                        img = cv2.circle(img, (int(acted_pos[0] * 128 + 128), int(acted_pos[1] * 128 + 128)), 3, [255, 255, 0], 1)
+                        acted_pos += act
+            cv2.imshow("Orbit", img)
+            cv2.waitKey(0)
+
 if __name__ == "__main__":
     # Parameters
     num_sample = 500
@@ -222,16 +242,24 @@ if __name__ == "__main__":
 
     # Load KNN policy
     sa_policy = KNNSAPolicy(zarr_path=zarr_path, horizon=horizon, pad_before=n_obs_steps - 1, pad_after=n_act_steps - 1, knn=knn_max, keys=["state", "action"])
+    policy_tree = PolicySampleTree(policy=sa_policy, k_sample=2, max_depth=2)
 
     # Test the policy
     env = OrbitEnv(episodes=epsiodes)
     env.seed(3)
+    test_env = OrbitEnv(episodes=epsiodes)
     obs = env.reset()
 
     # Dynamic test
     sa_policy.reset()
+    policy_tree.reset()
 
     for i in range(1000):
+        # Test tree
+        policy_tree.expand_tree({"state": np.stack([obs] * n_obs_steps, axis=0)})
+        states, actions, skeletons = policy_tree.export()
+        visualize_orbit_tree(states, actions, skeletons, test_env)
+
         pred = sa_policy.predict_state_action({"state": np.stack([obs] * n_obs_steps, axis=0)}, knn=3, allow_same_episode=True)
         pred_states, pred_actions = pred["state"], pred["action"]
         pred_actions = pred_actions.cpu().numpy()
@@ -241,6 +269,7 @@ if __name__ == "__main__":
         obs = env.step(pred_actions)
         img = env.render()
 
+        # Expand the policy tree
         print(f"Step {i}, obs: {obs}")
         if np.linalg.norm(obs) < 0.1:
             break

@@ -1,9 +1,37 @@
 """Policy Sample Tree."""
+
 import numpy as np
 from diffusion_policy.policy.base_sa_policy import BaseSAPolicy
 from collections import namedtuple
 
 SANode = namedtuple("SANode", ["state", "action", "depth", "value", "children"])
+
+
+############################### Utility #################################
+def extract_skeleton_from_tree(depths, childrens):
+    # Compue all leaf nodes first
+    leaf_nodes = []
+    for i in range(len(childrens)):
+        if len(childrens[i]) == 0:
+            leaf_nodes.append(i)
+    # Compute node parents
+    parents = [-1] * len(childrens)
+    for i in range(len(childrens)):
+        for child in childrens[i]:
+            parents[child] = i
+    # Compute all tree skeleton by traversing back from leaf nodes
+    tree_skeletons = []
+    for leaf_node in leaf_nodes:
+        node_id = leaf_node
+        depth = depths[node_id]
+        skeleton = []
+        while depth >= 0:
+            skeleton.append(node_id)
+            node_id = parents[node_id]
+            depth -= 1
+        tree_skeletons.append(skeleton[::-1])
+    return tree_skeletons
+
 
 class PolicySampleTree:
 
@@ -29,7 +57,6 @@ class PolicySampleTree:
             node_id = self.frontiers.pop(0)
             if self.nodes[node_id].depth < self.max_depth:
                 self.expand_node(node_id)
-        
 
     def expand_node(self, node_id: int):
         # Expand a node in the tree
@@ -44,14 +71,14 @@ class PolicySampleTree:
         pred_states = pred_states.cpu().numpy()
         pred_actions = pred_actions.cpu().numpy()
         # Overwrite the action of the node
-        self.nodes[node_id] = SANode(state=node.state, action=pred_actions[:, :self.n_act_steps, :], depth=node.depth, value=None, children=node.children)
+        self.nodes[node_id] = SANode(state=node.state, action=pred_actions[:, : self.n_act_steps, :], depth=node.depth, value=None, children=node.children)
         for i in range(self.k_sample):
-            new_node = SANode(state=pred_states[i, -self.n_obs_steps:, :], action=None, depth=node.depth + 1, value=None, children=[])
+            new_node = SANode(state=pred_states[i, -self.n_obs_steps :, :], action=None, depth=node.depth + 1, value=None, children=[])
             self.nodes.append(new_node)
             self.nodes[node_id].children.append(len(self.nodes) - 1)
             self.frontiers.append(len(self.nodes) - 1)
         return True
-    
+
     def export(self):
         # Export the state and action of the tree
         states = []
@@ -63,4 +90,5 @@ class PolicySampleTree:
             actions.append(node.action)
             depths.append(node.depth)
             childrens.append(node.children)
-        return states, actions, depths, childrens
+        skeletons = extract_skeleton_from_tree(depths, childrens)
+        return states, actions, skeletons
