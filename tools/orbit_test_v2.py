@@ -12,8 +12,6 @@ from diffusion_policy.control_utils.knn_policy import KNNSAPolicy
 from diffusion_policy.control_utils.policy_sample_tree import PolicySampleTree
 
 #######################  Generating data #######################
-
-
 # Define the spiral function in polar coordinates (r = a + b*theta)
 def spiral(theta, beta=0.0, gamma=1.0, a=0.0, b=0.1):
     r = a + b * theta
@@ -146,7 +144,7 @@ class OrbitEnv(gym.Env):
         # Render env
         vis_image = self.bg_image.copy()
         # Draw agent
-        vis_image = cv2.circle(vis_image, (int(self.agent_pos[0] * 128 + 128), int(self.agent_pos[1] * 128 + 128)), 3, [0, 255, 0], 1)
+        vis_image = cv2.circle(vis_image, (int(self.agent_pos[0] * 256 + 256), int(self.agent_pos[1] * 256 + 256)), 3, [0, 255, 0], 1)
         # Draw action
         if self.actions is not None:
             acted_pos = np.copy(self.prev_agent_pos)
@@ -154,14 +152,14 @@ class OrbitEnv(gym.Env):
                 # acted_pos += action
                 vis_image = cv2.arrowedLine(
                     vis_image,
-                    (int(acted_pos[0] * 128 + 128), int(acted_pos[1] * 128 + 128)),
-                    (int((acted_pos + action)[0] * 128 + 128), int((acted_pos + action)[1] * 128 + 128)),
+                    (int(acted_pos[0] * 256 + 256), int(acted_pos[1] * 256 + 256)),
+                    (int((acted_pos + action)[0] * 256 + 256), int((acted_pos + action)[1] * 256 + 256)),
                     [0, 255, 0],
                     1,
                 )
                 acted_pos += action
         # Draw previous agent
-        vis_image = cv2.circle(vis_image, (int(self.prev_agent_pos[0] * 128 + 128), int(self.prev_agent_pos[1] * 128 + 128)), 3, [0, 0, 255], 1)
+        vis_image = cv2.circle(vis_image, (int(self.prev_agent_pos[0] * 256 + 256), int(self.prev_agent_pos[1] * 256 + 256)), 3, [0, 0, 255], 1)
         return vis_image
 
     def step(self, actions):
@@ -173,17 +171,17 @@ class OrbitEnv(gym.Env):
         return self.agent_pos
 
     def draw_background_image(self):
-        background_image = np.zeros((256, 256, 3), dtype=np.uint8)
+        background_image = np.zeros((512, 512, 3), dtype=np.uint8)
         # Draw all states trajectory
         for i, episode in enumerate(self.episodes):
             color = [255, 0, 0] if i == 0 else [0, 0, 255]
             states = episode["state"]
-            scaled_states = states * 128 + 128  # Scale to 256x256
+            scaled_states = states * 256 + 256  # Scale to 512x512
             for j in range(scaled_states.shape[0]):
                 x, y = scaled_states[j]
                 background_image = cv2.circle(background_image, (int(x), int(y)), 2, color, 1)
         # Draw the goal region: a cirlce of radius 0.1
-        background_image = cv2.circle(background_image, (128, 128), 12, [0, 255, 0], 1)
+        background_image = cv2.circle(background_image, (256, 256), 12, [0, 255, 0], 1)
         return background_image
 
 
@@ -192,27 +190,33 @@ def visualize_orbit_tree(states, actions, skeletons, env: OrbitEnv):
     env.reset()
     env.set_state(root_state[-1, :])
     img = env.render()
-
+    cv2.imshow("Orbit", img)
+    cv2.waitKey(0)
     # Visualize
-    for skeleton in skeletons:
+    for idx, skeleton in enumerate(skeletons):
+        vis_img = np.copy(img)
         for node_idx in skeleton:
+            color = plt.cm.jet(idx / len(skeletons))
+            color = [int(color[0] * 255), int(color[1] * 255), int(color[2] * 255)]
             state = states[node_idx]
             action = actions[node_idx]
             # Draw the state and action
-            img = cv2.circle(img, (int(state[-1, 0] * 128 + 128), int(state[-1, 1] * 128 + 128)), 2, [255, 255, 0], 1)
+            vis_img = cv2.circle(vis_img, (int(state[-1, 0] * 256 + 256), int(state[-1, 1] * 256 + 256)), 2, [255, 255, 255], 1)
             # Draw the action
             if action is not None:
-                acted_pos = np.copy(state[-1])
                 for _i in range(action.shape[0]):
+                    acted_pos = np.copy(state[-1])
                     for _j in range(action.shape[1]):
                         act = action[_i, _j]
-                        img = cv2.arrowedLine(
-                            img, (int(acted_pos[0] * 128 + 128), int(acted_pos[1] * 128 + 128)), (int((acted_pos + act)[0] * 128 + 128), int((acted_pos + act)[1] * 128 + 128)), [0, 255, 0], 1
+                        vis_img = cv2.arrowedLine(
+                            vis_img, (int(acted_pos[0] * 256 + 256), int(acted_pos[1] * 256 + 256)), (int((acted_pos + act)[0] * 256 + 256), int((acted_pos + act)[1] * 256 + 256)), color, 1
                         )
-                        img = cv2.circle(img, (int(acted_pos[0] * 128 + 128), int(acted_pos[1] * 128 + 128)), 3, [255, 255, 0], 1)
+                        vis_img = cv2.circle(vis_img, (int(acted_pos[0] * 256 + 256), int(acted_pos[1] * 256 + 256)), 3, color, 1)
                         acted_pos += act
-            cv2.imshow("Orbit", img)
-            cv2.waitKey(0)
+        skeleton_str = ", ".join([str(node_idx) for node_idx in skeleton])
+        cv2.imshow(f"Orbit-{skeleton_str}", vis_img)
+        cv2.waitKey(0)
+
 
 if __name__ == "__main__":
     # Parameters
@@ -242,7 +246,7 @@ if __name__ == "__main__":
 
     # Load KNN policy
     sa_policy = KNNSAPolicy(zarr_path=zarr_path, horizon=horizon, pad_before=n_obs_steps - 1, pad_after=n_act_steps - 1, knn=knn_max, keys=["state", "action"])
-    policy_tree = PolicySampleTree(policy=sa_policy, k_sample=2, max_depth=2)
+    policy_tree = PolicySampleTree(policy=sa_policy, k_sample=2, max_depth=3)
 
     # Test the policy
     env = OrbitEnv(episodes=epsiodes)
@@ -259,19 +263,22 @@ if __name__ == "__main__":
         policy_tree.expand_tree({"state": np.stack([obs] * n_obs_steps, axis=0)})
         states, actions, skeletons = policy_tree.export()
         visualize_orbit_tree(states, actions, skeletons, test_env)
+        break
 
-        pred = sa_policy.predict_state_action({"state": np.stack([obs] * n_obs_steps, axis=0)}, knn=3, allow_same_episode=True)
-        pred_states, pred_actions = pred["state"], pred["action"]
-        pred_actions = pred_actions.cpu().numpy()
-        # Randomly sample an action
-        sample_idx = np.random.randint(0, pred_actions.shape[0])
-        pred_actions = pred_actions[sample_idx]
-        obs = env.step(pred_actions)
-        img = env.render()
+        ## Testing different control effects; Selecting the best action
 
-        # Expand the policy tree
-        print(f"Step {i}, obs: {obs}")
-        if np.linalg.norm(obs) < 0.1:
-            break
-        cv2.imshow("Orbit", img)
-        cv2.waitKey(1)
+        # pred = sa_policy.predict_state_action({"state": np.stack([obs] * n_obs_steps, axis=0)}, knn=3, allow_same_episode=True)
+        # pred_states, pred_actions = pred["state"], pred["action"]
+        # pred_actions = pred_actions.cpu().numpy()
+        # # Randomly sample an action
+        # sample_idx = np.random.randint(0, pred_actions.shape[0])
+        # pred_actions = pred_actions[sample_idx]
+        # obs = env.step(pred_actions)
+        # img = env.render()
+
+        # # Expand the policy tree
+        # print(f"Step {i}, obs: {obs}")
+        # if np.linalg.norm(obs) < 0.1:
+        #     break
+        # cv2.imshow("Orbit", img)
+        # cv2.waitKey(1)

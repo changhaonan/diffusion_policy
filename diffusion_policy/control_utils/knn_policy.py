@@ -8,6 +8,7 @@ from diffusion_policy.common.sampler import SequenceSampler, get_val_mask, downs
 from diffusion_policy.policy.base_image_policy import BaseImagePolicy
 from diffusion_policy.policy.base_sa_policy import BaseSAPolicy
 
+
 ###############################  Action Policy #################################
 class KNNPolicy(BaseImagePolicy):
     """KNN Policy field."""
@@ -35,7 +36,7 @@ class KNNPolicy(BaseImagePolicy):
         self.zarr_path = zarr_path
         self.kernel = kernel
         self.knn = knn
-        # 
+        #
         self.nearest_threshold = 0.1
 
     @property
@@ -47,11 +48,11 @@ class KNNPolicy(BaseImagePolicy):
     def dtype(self):
         # Override property
         return torch.float32
-    
+
     @property
     def n_act_steps(self):
         return self.pad_after + 1
-    
+
     @property
     def n_obs_steps(self):
         return self.pad_before + 1
@@ -108,7 +109,7 @@ class KNNPolicy(BaseImagePolicy):
         state = state * self.states_weights
         distances = np.linalg.norm(self.states - state, axis=1)
         if allow_same_episode:
-            closest_state_idx = np.argsort(distances)[: knn]
+            closest_state_idx = np.argsort(distances)[:knn]
         else:
             closest_state_idx = []
             for i in range(knn):
@@ -125,7 +126,7 @@ class KNNPolicy(BaseImagePolicy):
         # print("state:", state)
         # print("closest_state:", self.states[closest_state_idx])
         return closest_state_idx
-        
+
 
 class KNNSAPolicy(KNNPolicy, BaseSAPolicy):
     def __init__(self, zarr_path, horizon=1, pad_before=0, pad_after=0, kernel=None, knn=4, keys=["img", "state", "action", "control", "demo_type"]):
@@ -160,7 +161,7 @@ class KNNSAPolicy(KNNPolicy, BaseSAPolicy):
             if isinstance(states, torch.Tensor):
                 states = states.cpu().numpy()
 
-        # Compute the k nearest neighbors     
+        # Compute the k nearest neighbors
         closest_state_idx_list = []
         for state in states:
             # Find the k  closest state in the current episode
@@ -200,5 +201,5 @@ class KNNSAPolicy(KNNPolicy, BaseSAPolicy):
         pred_states = np.concatenate(pred_state_list, axis=0)
         # Truncate the action
         pred_actions = pred_actions[:, : self.n_act_steps, :]
-        pred_states = pred_states[:, : self.n_act_steps, :]
+        pred_states = pred_states[:, 1 : self.n_act_steps + 1, :]  # Shift one step as we want to predict the next state
         return {"action": torch.from_numpy(pred_actions).to(device=self.device, dtype=self.dtype), "state": torch.from_numpy(pred_states).to(device=self.device, dtype=self.dtype)}
