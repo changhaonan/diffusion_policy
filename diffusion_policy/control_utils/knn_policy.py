@@ -201,5 +201,5 @@ class KNNSAPolicy(KNNPolicy, BaseSAPolicy):
         pred_states = np.concatenate(pred_state_list, axis=0)
         # Truncate the action
         pred_actions = pred_actions[:, : self.n_act_steps, :]
-        pred_states = pred_states[:, 1 : self.n_act_steps + 1, :]  # Shift one step as we want to predict the next state
-        return {"action": torch.from_numpy(pred_actions).to(device=self.device, dtype=self.dtype), "state": torch.from_numpy(pred_states).to(device=self.device, dtype=self.dtype)}
+        pred_next_states = pred_states[:, 1 : self.n_act_steps + 1, :]  # Shift one step as we want to predict the next state
+        return {"action": torch.from_numpy(pred_actions).to(device=self.device, dtype=self.dtype), "state": torch.from_numpy(pred_next_states).to(device=self.device, dtype=self.dtype)}
