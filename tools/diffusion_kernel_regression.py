@@ -188,7 +188,7 @@ class DiffusionKernelRegression:
             self.conditions = self._normalize(self.conditions, self.stats["conditions"])
         self.alpha_t, self.beta_t, self.alpha_bar_t, self.sigma_t, self.h_t = self._get_scheduler(scheduler_type=scheduler_type)
 
-    def conditional_sampling(self, condition=None, batch_size=4, return_trajectory=False):
+    def conditional_sampling(self, condition=None, batch_size=4, return_trajectory=False, condition_amplify=1.0):
         # Normalize the condition
         if condition is not None:
             if isinstance(condition, torch.Tensor):
@@ -207,6 +207,7 @@ class DiffusionKernelRegression:
             for i in tqdm.tqdm(range(self.diffusion_steps - 1, -1, -1), leave=False):
                 data_diff = sample - local_datas
                 condition_diff = condition - local_conditions if condition is not None else np.zeros_like(data_diff)
+                condition_diff *= condition_amplify
                 kernel, partition = self._compute_kernel(data_diff, condition_diff, self.h_t[i], robust=self.use_robust_kernel)
                 # Kernel regression
                 data_pred = np.sum(kernel[:, None] * local_datas, axis=0) / np.sum(kernel)
