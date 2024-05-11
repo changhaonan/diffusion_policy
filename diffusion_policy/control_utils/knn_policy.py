@@ -6,7 +6,7 @@ from typing import Dict, Union
 from diffusion_policy.common.replay_buffer import ReplayBuffer
 from diffusion_policy.common.sampler import SequenceSampler, get_val_mask, downsample_mask
 from diffusion_policy.policy.base_image_policy import BaseImagePolicy
-from diffusion_policy.policy.base_sa_policy import BaseSAPolicy
+from diffusion_policy.policy.base_lowdim_policy import BaseLowdimPolicy
 
 
 ###############################  Action Policy #################################
@@ -128,7 +128,7 @@ class KNNPolicy(BaseImagePolicy):
         return closest_state_idx
 
 
-class KNNSAPolicy(KNNPolicy, BaseSAPolicy):
+class KNNSAPolicy(KNNPolicy, BaseLowdimPolicy):
     def __init__(self, zarr_path, horizon=1, pad_before=0, pad_after=0, kernel=None, knn=4, keys=["img", "state", "action", "control", "demo_type"]):
         super().__init__(zarr_path, horizon, pad_before, pad_after, kernel, knn, keys)
 

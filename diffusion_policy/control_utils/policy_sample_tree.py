@@ -1,7 +1,7 @@
 """Policy Sample Tree."""
 
 import numpy as np
-from diffusion_policy.policy.base_sa_policy import BaseSAPolicy
+from diffusion_policy.policy.base_lowdim_policy import BaseLowdimPolicy
 from collections import namedtuple
 
 SANode = namedtuple("SANode", ["idx", "state", "action", "depth", "reward", "value", "children", "branch_idx"])
@@ -35,7 +35,7 @@ def extract_skeleton_from_tree(depths, childrens):
 
 class PolicySampleTree:
 
-    def __init__(self, policy: BaseSAPolicy, k_sample: int, max_depth: int):
+    def __init__(self, policy: BaseLowdimPolicy, k_sample: int, max_depth: int):
         self.policy = policy
         self.k_sample = k_sample
         self.max_depth = max_depth

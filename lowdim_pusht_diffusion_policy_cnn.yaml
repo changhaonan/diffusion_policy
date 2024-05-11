@@ -1,4 +1,4 @@
-_target_: diffusion_policy.workspace.train_diffusion_unet_hybrid_workspace.TrainDiffusionUnetHybridWorkspace
+_target_: diffusion_policy.workspace.train_diffusion_unet_lowdim_sa_workspace.TrainDiffusionUnetLowdimSAWorkspace
 checkpoint:
   save_last_ckpt: true
   save_last_snapshot: false
@@ -28,20 +28,20 @@ logging:
   group: null
   id: null
   mode: online
-  name: train_control_diffusion_unet_hybrid_pusht_lowdim
+  name: train_diffusion_unet_pusht_lowdim
   project: diffusion_policy_debug
   resume: true
   tags:
-  - train_diffusion_unet_hybrid
+  - train_diffusion_unet_lowdim
   - pusht_lowdim
   - default
 multi_run:
-  run_dir: /common/users/hc856/Project/diffusion_policy/data/outputs/train_control_diffusion_unet_hybrid_pusht_lowdim
-  wandb_name_base: train_diffusion_unet_hybrid_pusht_lowdim
+  run_dir: /common/users/hc856/Project/diffusion_policy/data/outputs/train_control_diffusion_unet_pusht_lowdim
+  wandb_name_base: train_diffusion_unet_pusht_lowdim
 n_action_steps: 8
 n_latency_steps: 0
 n_obs_steps: 2
-name: train_diffusion_unet_hybrid
+name: train_diffusion_unet_lowdim
 obs_as_global_cond: true
 optimizer:
   _target_: torch.optim.AdamW
@@ -56,14 +56,13 @@ policy:
   _target_: diffusion_policy.policy.diffusion_unet_lowdim_sa_policy.DiffusionUnetLowdimSAPolicy
   model:
     _target_: diffusion_policy.model.diffusion.conditional_unet1d.ConditionalUnet1D
-    input_dim: "${eval: ${task.action_dim} if ${obs_as_local_cond} or ${obs_as_global_cond} else ${task.obs_dim} + ${task.action_dim}}"
-    local_cond_dim: "${eval: ${task.obs_dim} if ${obs_as_local_cond} else None}"
-    global_cond_dim: "${eval: ${task.obs_dim}*${n_obs_steps} if ${obs_as_global_cond} else None}"
+    input_dim: 7  # (5 + 2)
+    local_cond_dim: null
+    global_cond_dim: 10  # n_obs_steps * obs_dim
     diffusion_step_embed_dim: 256
     down_dims: [256, 512, 1024]
-    kernel_size: 5
-    n_groups: 8
-    cond_predict_scale: True
+    kernel_size: 3
+    n_groups: 1  # Must be able to divide input_dim
   noise_scheduler:
     _target_: diffusers.schedulers.scheduling_ddpm.DDPMScheduler
     num_train_timesteps: 100
@@ -73,43 +72,17 @@ policy:
     variance_type: fixed_small # Yilun's paper uses fixed_small_log instead, but easy to cause Nan
     clip_sample: True # required when predict_epsilon=False
     prediction_type: epsilon # or sample
-  cond_predict_scale: true
-  crop_shape:
-  - 84
-  - 84
-  diffusion_step_embed_dim: 128
-  down_dims:
-  - 512
-  - 1024
-  - 2048
-  eval_fixed_crop: true
-  control_in_decoder: false
-  cfg_ratio: 0.0  # classifier-free-guidance
-  mask_prob: 1.0  # mask_prob to train unconditional policy
   horizon: 16
-  kernel_size: 5
   n_action_steps: 8
-  n_groups: 8
   n_obs_steps: 2
-  noise_scheduler:
-    _target_: diffusers.schedulers.scheduling_ddpm.DDPMScheduler
-    beta_end: 0.02
-    beta_schedule: squaredcos_cap_v2
-    beta_start: 0.0001
-    clip_sample: true
-    num_train_timesteps: 100
-    prediction_type: epsilon
-    variance_type: fixed_small
-  horizon: ${horizon}
-  obs_dim: ${obs_dim}
-  action_dim: ${action_dim}
-  n_action_steps: ${eval:'${n_action_steps}+${n_latency_steps}'}
-  n_obs_steps: ${n_obs_steps}
+  obs_dim: 5
+  action_dim: 2
   num_inference_steps: 100
-  obs_as_local_cond: ${obs_as_local_cond}
-  obs_as_global_cond: ${obs_as_global_cond}
-  pred_action_steps_only: ${pred_action_steps_only}
+  obs_as_local_cond: false
+  obs_as_global_cond: true
+  pred_action_steps_only: false
   oa_step_convention: True
+  
 shape_meta:
   action:
     shape:
@@ -137,9 +110,7 @@ task:
     val_ratio: 0.1
     zarr_path: data/kowndi_pusht_demo_v2_repulse.zarr
   env_runner:
-    _target_: diffusion_policy.env_runner.pusht_image_control_runner.PushTImageControlRunner
-    control_type: "region"
-    default_control: true
+    _target_: diffusion_policy.env_runner.pusht_state_runner.PushTStateRunner
     fps: 10
     legacy_test: true
     max_steps: 300

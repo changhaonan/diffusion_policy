@@ -225,7 +225,7 @@ class TrainDiffusionUnetLowdimSAWorkspace(BaseWorkspace):
                         gt_action = batch["action"]
 
                         result = policy.predict_action(obs_dict)
-                        if cfg.pred_action_steps_only:
+                        if cfg.policy.pred_action_steps_only:
                             pred_action = result["action"]
                             start = cfg.n_obs_steps - 1
                             end = start + cfg.n_action_steps

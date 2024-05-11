@@ -8,12 +8,12 @@ from einops import rearrange, reduce
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
 
 from diffusion_policy.model.common.normalizer import LinearNormalizer
-from diffusion_policy.policy.base_sa_policy import BaseSAPolicy
+from diffusion_policy.policy.base_lowdim_policy import BaseLowdimPolicy
 from diffusion_policy.model.diffusion.conditional_unet1d import ConditionalUnet1D
 from diffusion_policy.model.diffusion.mask_generator import LowdimMaskGenerator
 
 
-class DiffusionUnetLowdimSAPolicy(BaseSAPolicy):
+class DiffusionUnetLowdimSAPolicy(BaseLowdimPolicy):
     def __init__(
         self,
         model: ConditionalUnet1D,
@@ -83,12 +83,11 @@ class DiffusionUnetLowdimSAPolicy(BaseSAPolicy):
 
     def predict_action(self, obs_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         """
-        obs_dict: must include "obs" & "next_obs" key
-        result: must include "action" key and "next_obs" key
+        obs_dict: must include "obs" & "obs_next" key
+        result: must include "action" key and "obs_next" key
         """
 
         assert "obs" in obs_dict, "obs key must be in obs_dict"
-        assert "next_obs" in obs_dict, "next_obs key must be in obs_dict"
         nobs = self.normalizer["obs"].normalize(obs_dict["obs"])
         B, _, Do = nobs.shape
         To = self.n_obs_steps
@@ -102,7 +101,7 @@ class DiffusionUnetLowdimSAPolicy(BaseSAPolicy):
 
         # handle different ways of passing observation
         global_cond = nobs[:, :To].reshape(nobs.shape[0], -1)
-        cond_data = torch.zeros(size=(B, self.n_action_steps, Da + Do), device=device, dtype=dtype)
+        cond_data = torch.zeros(size=(B, self.horizon, Da + Do), device=device, dtype=dtype)
         cond_mask = torch.zeros_like(cond_data, dtype=torch.bool)
 
         # run sampling
@@ -111,8 +110,8 @@ class DiffusionUnetLowdimSAPolicy(BaseSAPolicy):
         # unnormalize prediction
         action_pred = nsample[..., :Da]
         action_pred = self.normalizer["action"].unnormalize(action_pred)
-        next_obs_pred = nsample[..., Da:]
-        next_obs_pred = self.normalizer["next_obs"].unnormalize(next_obs_pred)
+        obs_next_pred = nsample[..., Da:]
+        obs_next_pred = self.normalizer["obs_next"].unnormalize(obs_next_pred)
 
         # trunc output
         act_start = To
@@ -121,19 +120,19 @@ class DiffusionUnetLowdimSAPolicy(BaseSAPolicy):
 
         nobs_end = act_end
         nobs_start = nobs_end - To
-        next_obs = next_obs_pred[:, nobs_start:nobs_end]
+        obs_next = obs_next_pred[:, nobs_start:nobs_end]
 
         result = {
             "action": action,
             "action_pred": action_pred,
-            "next_obs": next_obs,
-            "next_obs_pred": next_obs_pred,
+            "obs_next": obs_next,
+            "obs_next_pred": obs_next_pred,
         }
         return result
 
     # ========== training ===========
     def set_normalizer(self, normalizer: LinearNormalizer):
-        return super().set_normalizer(normalizer)
+        self.normalizer.load_state_dict(normalizer.state_dict())
 
     def compute_loss(self, batch):
         # normalize input
@@ -141,10 +140,10 @@ class DiffusionUnetLowdimSAPolicy(BaseSAPolicy):
         nbatch = self.normalizer.normalize(batch)
         obs = nbatch["obs"]
         action = nbatch["action"]
-        next_obs = nbatch["next_obs"]
+        obs_next = nbatch["obs_next"]
 
         # Sample noise that we'll add to the images
-        trajectory = torch.cat([obs, next_obs], dim=-1)
+        trajectory = torch.cat([action, obs_next], dim=-1)
         global_cond = obs[:, : self.n_obs_steps, :].reshape(obs.shape[0], -1)
 
         noise = torch.randn(trajectory.shape, device=trajectory.device)
@@ -159,7 +158,7 @@ class DiffusionUnetLowdimSAPolicy(BaseSAPolicy):
         pred = self.model(noisy_trajectory, timesteps, local_cond=None, global_cond=global_cond)
 
         pred_type = self.noise_scheduler.config.prediction_type
-        if pred_type == "residual":
+        if pred_type == "epsilon":
             pred = noisy_trajectory + pred
         elif pred_type == "conditional":
             pred = pred

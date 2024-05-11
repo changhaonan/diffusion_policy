@@ -20,6 +20,7 @@ class PushTStateDataset(BaseLowdimDataset):
         train_mask = downsample_mask(mask=train_mask, max_n=max_train_episodes, seed=seed)
 
         pad_after = pad_after if not return_next_state else pad_after + 1  # add one more step for next state
+        horizon = horizon + 1 if return_next_state else horizon  # add one more step for next state
         self.sampler = SequenceSampler(replay_buffer=self.replay_buffer, sequence_length=horizon, pad_before=pad_before, pad_after=pad_after, episode_mask=train_mask)
         self.action_key = action_key
         self.state_key = state_key
@@ -53,7 +54,7 @@ class PushTStateDataset(BaseLowdimDataset):
         data = {
             "obs": obs[:-1, ...],  # T, D_o
             "obs_next": obs_next[:-1, ...],  # T, D_o
-            "action": sample[self.action_key],  # T, D_a
+            "action": sample[self.action_key][:-1, ...],  # T, D_a
         }
         return data
 
