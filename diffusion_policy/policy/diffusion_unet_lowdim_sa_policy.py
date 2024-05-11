@@ -159,13 +159,13 @@ class DiffusionUnetLowdimSAPolicy(BaseLowdimPolicy):
 
         pred_type = self.noise_scheduler.config.prediction_type
         if pred_type == "epsilon":
-            pred = noisy_trajectory + pred
-        elif pred_type == "conditional":
-            pred = pred
+            target = noise
+        elif pred_type == "sample":
+            target = trajectory
         else:
             raise ValueError(f"Invalid prediction type {pred_type}")
 
-        loss = F.mse_loss(pred, trajectory, reduction="none")
+        loss = F.mse_loss(pred, target, reduction="none")
         loss = reduce(loss, "b ... -> b (...)", "mean")
         loss = loss.mean()
         return loss
