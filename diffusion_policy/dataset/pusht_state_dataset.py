@@ -12,14 +12,14 @@ from diffusion_policy.dataset.base_dataset import BaseLowdimDataset
 class PushTStateDataset(BaseLowdimDataset):
     """PushT dataset; using full state"""
 
-    def __init__(self, zarr_path, horizon=1, pad_before=0, pad_after=0, state_key="state", action_key="action", seed=42, val_ratio=0.0, max_train_episodes=None):
+    def __init__(self, zarr_path, horizon=1, pad_before=0, pad_after=0, state_key="state", action_key="action", seed=42, val_ratio=0.0, max_train_episodes=None, return_next_state=False):
         super().__init__()
         self.replay_buffer = ReplayBuffer.copy_from_path(zarr_path, keys=[state_key, action_key])
-
         val_mask = get_val_mask(n_episodes=self.replay_buffer.n_episodes, val_ratio=val_ratio, seed=seed)
         train_mask = ~val_mask
         train_mask = downsample_mask(mask=train_mask, max_n=max_train_episodes, seed=seed)
 
+        pad_after = pad_after if not return_next_state else pad_after + 1  # add one more step for next state
         self.sampler = SequenceSampler(replay_buffer=self.replay_buffer, sequence_length=horizon, pad_before=pad_before, pad_after=pad_after, episode_mask=train_mask)
         self.action_key = action_key
         self.state_key = state_key
@@ -49,8 +49,10 @@ class PushTStateDataset(BaseLowdimDataset):
     def _sample_to_data(self, sample):
         state = sample[self.state_key]
         obs = np.array(state)
+        obs_next = np.roll(obs, -1, axis=0)
         data = {
-            "obs": obs,  # T, D_o
+            "obs": obs[:-1, ...],  # T, D_o
+            "obs_next": obs_next[:-1, ...],  # T, D_o
             "action": sample[self.action_key],  # T, D_a
         }
         return data

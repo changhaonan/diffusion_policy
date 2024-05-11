@@ -11,7 +11,7 @@ import pygame
 
 
 @click.command()
-@click.option("-c", "--config", default="./image_pusht_control_diffusion_policy_cnn.yaml", type=str)
+@click.option("-c", "--config", default="./lowdim_pusht_control_diffusion_policy_cnn.yaml", type=str)
 @click.option("-ch", "--checkpoint", default="./data/checkpoints/repulse_concat.ckpt", type=str)
 @click.option("-rs", "--render_size", default=96, type=int)
 @click.option("-hz", "--control_hz", default=10, type=int)
