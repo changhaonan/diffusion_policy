@@ -349,11 +349,12 @@ class PushTEnvSA(PushTEnv):
         super().__init__(*args, **kwargs)
         self.obs_next = None
 
-    def set_obs_next(self, obs_next):
+    def set_obs_next(self, *args, **kwargs):
+        obs_next = np.stack(args)
         self.obs_next = obs_next
 
-    def render(self):
-        img = super().render()
+    def render(self, mode):
+        img = super().render(mode=mode)
         if self.obs_next is not None:
             img = self._render_state_prediction(img)
         return img
