@@ -340,3 +340,34 @@ class PushTEnv(gym.Env):
         body.friction = 1
         self.space.add(body, shape1, shape2)
         return body
+
+
+###################### Augment render with state prediction ######################
+class PushTEnvSA(PushTEnv):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.obs_next = None
+
+    def set_obs_next(self, obs_next):
+        self.obs_next = obs_next
+
+    def render(self):
+        img = super().render()
+        if self.obs_next is not None:
+            img = self._render_state_prediction(img)
+        return img
+
+    def reset(self):
+        obs = super().reset()
+        self.obs_next = None
+        return obs
+
+    def _render_state_prediction(self, img):
+        pos_agent = self.obs_next[:2]
+        pos_block = np.array(self.obs_next[2:4])
+        rot_block = self.obs_next[4]
+
+        pos_block = (pos_block / 512 * 96).astype(np.int32)
+        cv2.drawMarker(img, tuple(pos_block), color=(0, 255, 0), markerType=cv2.MARKER_CROSS, markerSize=10, thickness=1)
+        return img

@@ -7,7 +7,7 @@ import tqdm
 import dill
 import math
 import wandb.sdk.data_types.video as wv
-from diffusion_policy.env.pusht.pusht_env import PushTEnv
+from diffusion_policy.env.pusht.pusht_env import PushTEnv, PushTEnvSA
 from diffusion_policy.gym_util.async_vector_env import AsyncVectorEnv
 
 # from diffusion_policy.gym_util.sync_vector_env import SyncVectorEnv
@@ -57,7 +57,7 @@ class PushTStateRunner(BaseLowdimRunner):
         def env_fn():
             return MultiStepWrapper(
                 VideoRecordingWrapper(
-                    PushTEnv(legacy=legacy_test),
+                    PushTEnvSA(legacy=legacy_test),
                     video_recoder=VideoRecorder.create_h264(fps=fps, codec="h264", input_pix_fmt="rgb24", crf=crf, thread_type="FRAME", thread_count=1),
                     file_path=None,
                 ),
@@ -205,7 +205,9 @@ class PushTStateRunner(BaseLowdimRunner):
                 # handle latency_steps, we discard the first n_latency_steps actions
                 # to simulate latency
                 action = np_action_dict["action"][:, self.n_latency_steps :]
-
+                obs_next = np_action_dict["obs_next"][:, self.n_latency_steps :]
+                # set obs_next for render
+                env.call_each("set_obs_next", args_list=[(x,) for x in obs_next])
                 # step env
                 obs, reward, done, info = env.step(action)
                 done = np.all(done)
