@@ -207,7 +207,7 @@ class PushTStateRunner(BaseLowdimRunner):
                 action = np_action_dict["action"][:, self.n_latency_steps :]
                 obs_next = np_action_dict["obs_next"][:, self.n_latency_steps :]
                 # set obs_next for render
-                env.call_each("set_obs_next", args_list=[(x,) for x in obs_next])
+                env.call_each("set_obs_next", args_list=[x for x in obs_next])
                 # step env
                 obs, reward, done, info = env.step(action)
                 done = np.all(done)

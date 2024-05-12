@@ -364,9 +364,9 @@ class PushTEnvSA(PushTEnv):
         return obs
 
     def _render_state_prediction(self, img):
-        pos_agent = self.obs_next[:2]
-        pos_block = np.array(self.obs_next[2:4])
-        rot_block = self.obs_next[4]
+        pos_agent = self.obs_next[-1, :2]
+        pos_block = np.array(self.obs_next[-1, 2:4])
+        rot_block = self.obs_next[-1, 4]
 
         pos_block = (pos_block / 512 * 96).astype(np.int32)
         cv2.drawMarker(img, tuple(pos_block), color=(0, 255, 0), markerType=cv2.MARKER_CROSS, markerSize=10, thickness=1)
