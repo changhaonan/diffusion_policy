@@ -44,7 +44,7 @@ def main(arch, netid, data_src, data_version, cuda_id, data_extra, stitch):
     if data_extra:
         command += f" task.dataset.zarr_path={data_src}/kowndi_pusht_demo_v{data_version}_{data_extra}.zarr"
     else:
-        # command += f" task.dataset.zarr_path={data_src}/kowndi_pusht_demo_v{data_version}.zarr"
+        # command += f" task.dataset.zarr_path={data_src}/kowndi_pusht_demo_v2_repulse.zarr"
         command += f" task.dataset.zarr_path={data_src}/pusht/pusht_cchi_v7_replay.zarr"
     print(command)
     os.system(command)
